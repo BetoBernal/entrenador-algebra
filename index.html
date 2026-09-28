@@ -32,6 +32,7 @@ button{font:inherit;cursor:pointer}
 .bar{flex:1;height:12px;background:var(--line);border-radius:99px;overflow:hidden}
 .bar>i{display:block;height:100%;background:var(--pri);border-radius:99px;transition:width .3s}
 .bar.e2>i{background:#FF7A1A}
+.bar.e3>i{background:#0FA36B}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 2px}
 .stat{background:var(--card);border:2px solid var(--line);border-radius:99px;padding:4px 12px;font-weight:800;font-size:.9rem}
 /* matemáticas */
@@ -97,6 +98,14 @@ input.txt{width:100%;font:inherit;padding:13px 14px;border:2px solid var(--line)
 .big .m{white-space:normal}
 
 .logo{display:block;margin:0 auto 6px;height:150px;width:auto;max-width:100%;object-fit:contain;background:none;border:0}
+.nobr{white-space:nowrap}.mline{display:block;margin:4px 0}
+svg.fig.plane{max-width:300px;cursor:pointer;touch-action:manipulation}
+.plane-grid{stroke:#E4E1F7;stroke-width:1}
+.plane-axis{stroke:#17133B;stroke-width:2}
+.plane-line{stroke-width:3;fill:none}
+.plane-line.c1{stroke:#5B3DF5}.plane-line.c2{stroke:#E0562F}
+.plane-pt{fill:#5B3DF5;stroke:#fff;stroke-width:1.5}
+.plane-pt.c2{fill:#E0562F}
 </style></head><body><div id="app"></div><script>
 const __M={};const __C={};
 function __req(n){n=n.replace(/^\.\//,"").replace(/\.js$/,"");if(__C[n])return __C[n].exports;const m={exports:{}};__C[n]=m;__M[n](m,m.exports);return m.exports;}
@@ -661,12 +670,65 @@ function checkQR(ans, prob) {
   return { ok: false, tag: 'división', msg: prob.fallback || 'Todavía no. Ve paso a paso: divide, multiplica, resta y baja.' };
 }
 
+function checkSys(ans, prob) {
+  const xs = String((ans && ans.x) || '').trim(), ys = String((ans && ans.y) || '').trim();
+  if (!xs || !ys) return { ok: false, syntax: true, msg: 'Escribe el valor de x y el valor de y.' };
+  const rx = checkPoly(xs, prob.expected.x, 'expanded', prob);
+  const ry = checkPoly(ys, prob.expected.y, 'expanded', prob);
+  if (rx.ok && ry.ok) return { ok: true };
+  if (rx.syntax) return { ok: false, syntax: true, msg: 'No pude leer el valor de x: ' + rx.msg };
+  if (ry.syntax) return { ok: false, syntax: true, msg: 'No pude leer el valor de y: ' + ry.msg };
+  if (rx.ok && !ry.ok) return { ok: false, tag: ry.tag || prob.fallbackTag || 'despeje', msg: 'El valor de x está bien. Revisa y: ' + (ry.msg || '') };
+  if (!rx.ok && ry.ok) return { ok: false, tag: rx.tag || prob.fallbackTag || 'despeje', msg: 'El valor de y está bien. Revisa x: ' + (rx.msg || '') };
+  return { ok: false, tag: prob.fallbackTag || 'despeje', msg: prob.fallback || 'Ninguno de los dos valores es correcto todavía. Revisa el procedimiento paso a paso.' };
+}
+
+// Punto en el plano cartesiano (kind:'point'): prob.expected = {x, y}
+function checkPoint(ans, prob) {
+  if (!ans || typeof ans.x !== 'number' || typeof ans.y !== 'number' || !isFinite(ans.x) || !isFinite(ans.y)) {
+    return { ok: false, syntax: true, msg: 'Toca un punto en el plano para responder.' };
+  }
+  const ex = prob.expected;
+  if (ans.x === ex.x && ans.y === ex.y) return { ok: true };
+  const tag = prob.fallbackTag || 'plano cartesiano';
+  if (ans.x === ex.y && ans.y === ex.x && !(ex.x === ex.y)) {
+    return { ok: false, tag, msg: 'Revisa: pusiste x cuando iba y (o al revés). En el par (x, y) el primer valor es x y el segundo es y.' };
+  }
+  if (ans.x === -ex.x && ans.y === -ex.y && (ex.x !== 0 || ex.y !== 0)) {
+    return { ok: false, tag, msg: 'Cuidado con el signo: tu punto quedó en el cuadrante opuesto.' };
+  }
+  if (ans.x === -ex.x && ans.y === ex.y && ex.x !== 0) return { ok: false, tag, msg: 'Cuidado con el signo de x: revisa si va a la derecha o a la izquierda del origen.' };
+  if (ans.x === ex.x && ans.y === -ex.y && ex.y !== 0) return { ok: false, tag, msg: 'Cuidado con el signo de y: revisa si va arriba o abajo del origen.' };
+  const w = (prob && prob.wrongs) || [];
+  for (const x2 of w) if (x2.p && x2.p.x === ans.x && x2.p.y === ans.y) return { ok: false, tag: x2.tag, msg: x2.msg };
+  return { ok: false, tag, msg: prob.fallback || 'Ese no es el punto correcto. Cuenta con cuidado desde el origen: primero x, después y.' };
+}
+
+// Dos puntos sobre una recta (kind:'point2'): prob.expected = {m, b} (y = m·x + b)
+function checkPoint2(ans, prob) {
+  if (!ans || !ans.p1 || !ans.p2 || typeof ans.p1.x !== 'number' || typeof ans.p2.x !== 'number' || typeof ans.p1.y !== 'number' || typeof ans.p2.y !== 'number') {
+    return { ok: false, syntax: true, msg: 'Toca dos puntos distintos sobre la recta.' };
+  }
+  const { m, b } = prob.expected;
+  const onLine = (p) => p.y === m * p.x + b;
+  const same = ans.p1.x === ans.p2.x && ans.p1.y === ans.p2.y;
+  const ok1 = onLine(ans.p1), ok2 = onLine(ans.p2);
+  const tag = prob.fallbackTag || 'gráficas lineales';
+  if (ok1 && ok2 && !same) return { ok: true };
+  if (same) return { ok: false, tag, msg: 'Elige dos puntos DISTINTOS sobre la recta.' };
+  if (!ok1 && !ok2) return { ok: false, tag, msg: prob.fallback || 'Ninguno de los dos puntos está sobre la recta. Sustituye tu valor de x en la ecuación para hallar el y correcto.' };
+  return { ok: false, tag, msg: 'Uno de los dos puntos está bien, pero el otro no está sobre la recta. Revisa sustituyendo su x en la ecuación.' };
+}
+
 // Entrada general
 function checkAnswer(prob, ans) {
   switch (prob.kind) {
     case 'input': return checkPoly(ans, prob.expected, prob.mode, prob);
     case 'frac': return checkFrac(ans, prob.expected, prob);
     case 'qr': return checkQR(ans, prob);
+    case 'sys': return checkSys(ans, prob);
+    case 'point': return checkPoint(ans, prob);
+    case 'point2': return checkPoint2(ans, prob);
     case 'choice': {
       const o = prob.options[ans];
       if (!o) return { ok: false, syntax: true, msg: 'Elige una opción.' };
@@ -692,12 +754,15 @@ function isAnswerEmpty(prob, ans) {
   if (prob.kind === 'input') return !String(ans || '').trim();
   if (prob.kind === 'frac') return !String((ans && ans.n) || '').trim();
   if (prob.kind === 'qr') return !String((ans && ans.q) || '').trim();
+  if (prob.kind === 'sys') return !String((ans && ans.x) || '').trim() || !String((ans && ans.y) || '').trim();
+  if (prob.kind === 'point') return !ans || typeof ans.x !== 'number' || typeof ans.y !== 'number';
+  if (prob.kind === 'point2') return !ans || !ans.p1 || !ans.p2 || typeof ans.p1.x !== 'number' || typeof ans.p2.x !== 'number';
   if (prob.kind === 'choice') return ans === null || ans === undefined;
   if (prob.kind === 'multi') return !ans || !ans.length;
   return true;
 }
 
-if (typeof module !== 'undefined') module.exports = { checkPoly, checkAnswer, checkFrac, checkQR, checkFactor, isAnswerEmpty };
+if (typeof module !== 'undefined') module.exports = { checkPoly, checkAnswer, checkFrac, checkQR, checkFactor, checkSys, checkPoint, checkPoint2, isAnswerEmpty };
 
 };
 __M["gen"]=function(module,exports){var require=__req;
@@ -827,6 +892,54 @@ function svgRectQ(top, side, area) {
     + '<text x="160" y="28" text-anchor="middle" class="svg-lab">' + svgText(top) + '</text>'
     + '<text x="38" y="108" text-anchor="end" class="svg-lab">' + svgText(side) + '</text>'
     + '<text x="160" y="108" text-anchor="middle" class="svg-lab svg-c">' + svgText(area) + '</text></svg>';
+}
+
+// Geometría del plano cartesiano de svgPlane: la usan app.js (clics) y svgPlane (dibujo) para que
+// la conversión pantalla → coordenadas de datos sea siempre consistente con lo que se dibuja.
+function planeGeom(range) {
+  range = range || [-6, 6];
+  const [lo, hi] = range;
+  const W = 300, H = 300, pad = 20;
+  const span = hi - lo;
+  return { W, H, pad, lo, hi, span };
+}
+
+// Plano cartesiano reutilizable.
+// opts: { range:[min,max], points:[{x,y,label,color}], lines:[{m,b,color,label}] o {a,b,c,color,label} para ax+by=c, highlightQuad:bool }
+function svgPlane(opts) {
+  opts = opts || {};
+  const range = opts.range || [-6, 6];
+  const { W, H, pad, lo, hi, span } = planeGeom(range);
+  const sx = (x) => pad + (x - lo) / span * (W - 2 * pad);
+  const sy = (y) => H - pad - (y - lo) / span * (H - 2 * pad);
+  let t = '<svg class="fig plane" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="plano cartesiano">';
+  // cuadrícula
+  for (let k = Math.ceil(lo); k <= Math.floor(hi); k++) {
+    t += '<line x1="' + sx(k) + '" y1="' + sy(lo) + '" x2="' + sx(k) + '" y2="' + sy(hi) + '" class="plane-grid"/>';
+    t += '<line x1="' + sx(lo) + '" y1="' + sy(k) + '" x2="' + sx(hi) + '" y2="' + sy(k) + '" class="plane-grid"/>';
+  }
+  // ejes
+  t += '<line x1="' + sx(lo) + '" y1="' + sy(0) + '" x2="' + sx(hi) + '" y2="' + sy(0) + '" class="plane-axis"/>';
+  t += '<line x1="' + sx(0) + '" y1="' + sy(lo) + '" x2="' + sx(0) + '" y2="' + sy(hi) + '" class="plane-axis"/>';
+  t += '<text x="' + (sx(hi) - 4) + '" y="' + (sy(0) - 6) + '" text-anchor="end" class="svg-lab">x</text>';
+  t += '<text x="' + (sx(0) + 10) + '" y="' + (sy(hi) + 10) + '" text-anchor="start" class="svg-lab">y</text>';
+  if (opts.quadLabels) {
+    t += '<text x="' + (sx(hi) - 30) + '" y="' + (sy(0) - 30) + '" class="svg-lab svg-q">I</text>';
+    t += '<text x="' + (sx(lo) + 20) + '" y="' + (sy(0) - 30) + '" class="svg-lab svg-q">II</text>';
+    t += '<text x="' + (sx(lo) + 20) + '" y="' + (sy(0) + 40) + '" class="svg-lab svg-q">III</text>';
+    t += '<text x="' + (sx(hi) - 30) + '" y="' + (sy(0) + 40) + '" class="svg-lab svg-q">IV</text>';
+  }
+  (opts.lines || []).forEach((ln) => {
+    let m, b;
+    if (ln.m !== undefined) { m = ln.m; b = ln.b; } else { m = -ln.a / ln.b; b = ln.c / ln.b; } // ax+by=c → y=mx+b
+    const y1 = m * lo + b, y2 = m * hi + b;
+    t += '<line x1="' + sx(lo) + '" y1="' + sy(y1) + '" x2="' + sx(hi) + '" y2="' + sy(y2) + '" class="plane-line ' + (ln.color || 'c1') + '"/>';
+  });
+  (opts.points || []).forEach((p) => {
+    t += '<circle cx="' + sx(p.x) + '" cy="' + sy(p.y) + '" r="5" class="plane-pt ' + (p.color || '') + '"/>';
+    if (p.label) t += '<text x="' + (sx(p.x) + 8) + '" y="' + (sy(p.y) - 8) + '" class="svg-lab">' + svgText(p.label) + '</text>';
+  });
+  return t + '</svg>';
 }
 
 // ---------- fabricación ----------
@@ -1028,6 +1141,9 @@ function g_suma(r, lvl) {
     fallbackTag: 'semejantes', fallback: 'Suma únicamente términos semejantes (misma parte literal). Revisa que no falte ninguno.' });
 }
 
+// Expresión en HTML que no parte "− (" ni el contenido de un paréntesis entre líneas
+function mnb(str) { return M(str).replace(/ ([−+]) /g, ' $1\u00a0').replace(/\((?:[^()<]|<[^>]*>)*\)/g, '<span class="nobr">$&</span>'); }
+function mline(str) { return '<div class="mline">' + mnb(str) + '</div>'; }
 function g_resta(r, lvl) {
   const v = pickVar(r); const [a, b] = twoVars(r);
   let A, B, C = null, expr, expected, instr, wording;
@@ -1038,9 +1154,8 @@ function g_resta(r, lvl) {
   const form = lvl === 1 ? r.pick(['sym', 'resta']) : lvl === 2 ? r.pick(['sym', 'resta', 'resta', 'reste']) : r.pick(['resta', 'suma', 'reste']);
   let wrongs = [];
   if (form === 'sym') { instr = 'Efectúa la resta.'; expr = par(A) + ' ' + MINUS + ' ' + par(B); expected = A.sub(B); }
-  else if (form === 'resta') { instr = 'Resta el <b>segundo</b> del <b>primero</b>… ¡ojo con el orden!'; instr = 'Resta el polinomio <b>' + fs(B) + '</b> de <b>' + fs(A) + '</b>.'; expr = ''; expected = A.sub(B); wording = 'resta'; }
-  else if (form === 'reste') { instr = 'Al polinomio <b>' + fs(A) + '</b> réstale <b>' + fs(B) + '</b>.'; expr = ''; expected = A.sub(B); }
-  else { C = mk(2, 2); instr = 'De la suma de <b>' + fs(A) + '</b> con <b>' + fs(B) + '</b>, resta <b>' + fs(C) + '</b>.'; expr = ''; expected = A.add(B).sub(C); }
+  else if (form === 'resta' || form === 'reste') { instr = 'Al polinomio <b>' + M(fs(A)) + '</b>, réstale <b>' + M(fs(B)) + '</b>.'; expr = par(A) + ' ' + MINUS + ' ' + par(B); expected = A.sub(B); }
+  else { C = mk(2, 2); instr = 'De la suma de <b>' + M(fs(A)) + '</b> con <b>' + M(fs(B)) + '</b>, resta <b>' + M(fs(C)) + '</b>.'; expr = ''; expected = A.add(B).sub(C); }
   if (expected.isZero()) return g_resta(r, lvl);
   const S = C ? A.add(B) : A;
   const sub = C || B;
@@ -1051,11 +1166,12 @@ function g_resta(r, lvl) {
   wrongs = [
     { p: S.add(sub), tag: 'paréntesis', msg: 'Parece que sumaste. Cuando hay un signo − delante del paréntesis, cambia el signo de <b>todos</b> los términos de adentro.' },
     { p: oneSign, tag: 'paréntesis', msg: 'Cambiaste el signo solo del primer término. El − delante del paréntesis afecta a <b>todos</b> los términos que están adentro.' },
-    { p: sub.sub(S), tag: 'signos', msg: 'Ojo con el orden: al restar, «A de B» significa B − A (lo que se resta va después del signo −).' },
+    { p: sub.sub(S), tag: 'signos', msg: 'Ojo con el orden: se escribe primero el polinomio inicial y después, entre paréntesis, el que se resta.' },
   ];
-  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr, expr: expr ? M(expr) : '', expected, vars, wrongs, fallbackTag: 'paréntesis',
-    hints: ['Escribe primero el polinomio del que se resta (minuendo) y después el que se resta (sustraendo) entre paréntesis.', 'El signo − delante de un paréntesis cambia el signo de cada término de adentro.', 'Queda: ' + fs(S) + ' ' + MINUS + ' ' + par(sub) + ' = ' + gp.grouped.replace(/^\(/, '(')],
-    solution: [C ? 'Primero sumamos: ' + M(fs(S)) : 'Escribimos el minuendo y el sustraendo: ' + M(fs(S) + ' ' + MINUS + ' ' + par(sub)), 'Cambiamos el signo de cada término del sustraendo: ' + M(fs(S) + ' + ' + par(neg)), 'Reducimos términos semejantes: ' + M(fs(expected))], answer: MP(expected),
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr, expr: expr ? mnb(expr) : '', expected, vars, wrongs, fallbackTag: 'paréntesis',
+    hints: ['Escribe primero el polinomio inicial y después coloca entre paréntesis el polinomio que vas a restar.', 'El signo − delante de un paréntesis cambia el signo de cada término de adentro.', 'Queda: ' + fs(S) + ' ' + MINUS + ' ' + par(sub) + ' = ' + gp.grouped.replace(/^\(/, '(')],
+    solution: C ? ['Primero sumamos los dos polinomios: ' + mline(fs(S)), 'Ahora restamos el tercero, entre paréntesis: ' + mline(par(S) + ' ' + MINUS + ' ' + par(sub)), 'El signo − cambia el signo de cada término del paréntesis: ' + mline(fmtList(S.sorted().map((t) => Poly.mono(t.c, t.e)).concat(neg.sorted().map((t) => Poly.mono(t.c, t.e))))), 'Reducimos términos semejantes: ' + mline(fs(expected))]
+      : ['Escribimos el polinomio inicial y, entre paréntesis, el que se resta: ' + mline(par(S) + ' ' + MINUS + ' ' + par(sub)), 'El signo − cambia el signo de cada término del paréntesis: ' + mline(fmtList(S.sorted().map((t) => Poly.mono(t.c, t.e)).concat(neg.sorted().map((t) => Poly.mono(t.c, t.e))))), 'Reducimos términos semejantes: ' + mline(fs(expected))], answer: MP(expected),
     fallback: 'Recuerda: restar es sumar el opuesto. Cambia el signo de <b>todos</b> los términos del polinomio que se resta y luego reduce.' });
 }
 
@@ -1171,7 +1287,7 @@ function g_divPol(r, lvl, opts) {
     solution, fallbackTag: 'división', fallback: 'Ve paso a paso: divide el primer término, multiplica por todo el divisor, resta (cambiando signos) y baja el siguiente término.' };
   if (geo) {
     if (!dv.r.isZero()) return g_divPol(r, lvl, opts);
-    return P(Object.assign({}, common, { kind: 'input', mode: 'expanded', instr: 'El <b>área</b> de un rectángulo es <b>' + fs(A) + '</b> y un lado mide <b>' + fs(B) + '</b>. ¿Cuánto mide el otro lado?', expr: '', figure: svgRectQ(fs(B), '?', 'Área = ' + fs(A)), expected: dv.q,
+    return P(Object.assign({}, common, { kind: 'input', mode: 'expanded', instr: 'El <b>área</b> de un rectángulo es <b>' + M(fs(A)) + '</b> y un lado mide <b>' + M(fs(B)) + '</b>. ¿Cuánto mide el otro lado?', expr: '', figure: svgRectQ(fs(B), '?', 'Área = ' + fs(A)), expected: dv.q,
       hints: ['Área = base × altura, así que el otro lado es el área ÷ el lado conocido.', 'Divide el polinomio del área entre ' + fs(B) + ' con división larga.', common.hints[2]],
       solution: ['Como Área = base × altura, altura = Área ÷ base.'].concat(solution.slice(0, -1), ['El otro lado mide ' + MP(dv.q) + '.']), answer: MP(dv.q), fallbackTag: 'división' }));
   }
@@ -1361,7 +1477,7 @@ function g_multPol(r, lvl, opts) {
   const solution = ['Cada término del primer paréntesis multiplica a todo el segundo: ' + At.map((t, i) => M(fs(t) + '·' + par(B) + ' = ' + fs(partial[i]))).join(' ; '), 'Sumamos los resultados: ' + M(partial.map((p) => par(p)).join(' + ')), 'Reducimos términos semejantes: ' + MP(ans)];
   if (geo) {
     figure = svgAreaModel([v, String(A.terms().filter((t) => t.c && Object.keys(t.e).length === 0)[0].c.n)], [v, String(B.terms().filter((t) => Object.keys(t.e).length === 0)[0].c.n)], { labels: [[v + '^2', String(B.terms().filter((t) => Object.keys(t.e).length === 0)[0].c.n) + v], [String(A.terms().filter((t) => Object.keys(t.e).length === 0)[0].c.n) + v, String(A.terms().filter((t) => Object.keys(t.e).length === 0)[0].c.n * B.terms().filter((t) => Object.keys(t.e).length === 0)[0].c.n)]], reveal: 0 });
-    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Un rectángulo mide <b>' + fs(A) + '</b> de ancho y <b>' + fs(B) + '</b> de largo. Escribe su <b>área</b> como polinomio.', expr: '', figure: svgRectQ(fs(B), fs(A), 'Área = ?'), expected: ans, vars: [v], wrongs, fallbackTag: 'distributiva',
+    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Un rectángulo mide <b>' + M(fs(A)) + '</b> de ancho y <b>' + M(fs(B)) + '</b> de largo. Escribe su <b>área</b> como polinomio.', expr: '', figure: svgRectQ(fs(B), fs(A), 'Área = ?'), expected: ans, vars: [v], wrongs, fallbackTag: 'distributiva',
       hints: ['Área = ancho × largo.', 'Multiplica ' + par(A) + par(B) + ' con la propiedad distributiva.', 'Los cuatro productos son: ' + v + '·' + v + ', ' + v + '·' + fs(Bt[1]) + ', ' + fs(At[1]) + '·' + v + ', ' + fs(At[1]) + '·' + fs(Bt[1])],
       solution: ['Área = ancho × largo: ' + M(par(A) + par(B))].concat(solution), answer: MP(ans), fallback: 'Área = ancho × largo. Multiplica cada término por cada término y reduce.' });
   }
@@ -1377,7 +1493,7 @@ function g_cuadrado(r, lvl, opts) {
   let A, B;
   if (opts.geo) { A = Mo(r.int(1, 3), { [v]: 1 }); B = K(r.int(1, 6)); const side = A.add(B);
     const ans = side.mul(side); const cross = A.mul(B).scale(new Fr(2));
-    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Un terreno cuadrado tiene lados de <b>' + fs(side) + '</b> metros. Escribe su <b>área</b> como polinomio.', expr: '', figure: svgPoly(SHAPES.square, [fs(side), fs(side), fs(side), fs(side)], { center: 'Área = ?' }), expected: ans, vars: [v],
+    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Un terreno cuadrado tiene lados de <b>' + M(fs(side)) + '</b> metros. Escribe su <b>área</b> como polinomio.', expr: '', figure: svgPoly(SHAPES.square, [fs(side), fs(side), fs(side), fs(side)], { center: 'Área = ?' }), expected: ans, vars: [v],
       wrongs: [{ p: A.mul(A).add(B.mul(B)), tag: 'notable', msg: 'Falta el término del medio: al multiplicar ' + par(side) + par(side) + ' aparecen dos productos iguales de ' + fs(A) + ' por ' + fs(B) + '.' }], fallbackTag: 'notable',
       hints: ['Área del cuadrado = lado × lado = (lado)².', 'Usa el binomio al cuadrado: cuadrado del primero + doble producto + cuadrado del segundo.', 'Cuadrado del primero: ' + fs(A.mul(A)) + '. Doble producto: 2·' + par(A) + '·' + fs(B) + ' = ' + fs(cross)],
       solution: ['Área = lado² = ' + M(par(side) + '^2'), 'Primero²: ' + M(fs(A.mul(A))) + ' ; doble producto: ' + M(fs(cross)) + ' ; segundo²: ' + M(fs(B.mul(B))), 'Área = ' + MP(ans)], answer: MP(ans), fallback: 'Área = (lado)². Usa: cuadrado del primero + doble producto + cuadrado del segundo.' });
@@ -1426,7 +1542,7 @@ function g_cubo(r, lvl, opts) {
   const s = r.pick([1, -1]);
   let A, B;
   if (opts.geo) { A = Mo(1, { [v]: 1 }); B = K(r.int(1, 4)); const side = A.add(B); const ans = side.pow(3);
-    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Un cubo mide <b>' + fs(side) + '</b> de lado. Escribe su <b>volumen</b> como polinomio.', expr: '', figure: svgCube(fs(side)), expected: ans, vars: [v],
+    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Un cubo mide <b>' + M(fs(side)) + '</b> de lado. Escribe su <b>volumen</b> como polinomio.', expr: '', figure: svgCube(fs(side)), expected: ans, vars: [v],
       wrongs: [{ p: A.pow(3).add(B.pow(3)), tag: 'notable', msg: 'Faltan términos: el cubo de un binomio tiene 4 términos, no solo el cubo de cada uno.' }], fallbackTag: 'notable',
       hints: ['Volumen = lado × lado × lado = (lado)³.', 'Cubo del primero + 3·(primero²)·(segundo) + 3·(primero)·(segundo²) + cubo del segundo.', 'Primero³: ' + fs(A.pow(3)) + '. 3·' + fs(A.pow(2)) + '·' + fs(B) + ' = ' + fs(A.pow(2).mul(B).scale(new Fr(3)))],
       solution: ['Volumen = lado³ = ' + M(par(side) + '^3'), 'Cubo del primero: ' + M(fs(A.pow(3))), 'Triple del primero² por el segundo: ' + M(fs(A.pow(2).mul(B).scale(new Fr(3)))), 'Triple del primero por el segundo²: ' + M(fs(A.mul(B.pow(2)).scale(new Fr(3)))), 'Cubo del segundo: ' + M(fs(B.pow(3))), 'Volumen = ' + MP(ans)], answer: MP(ans), fallback: 'Usa la fórmula del binomio al cubo: 4 términos.' });
@@ -1532,7 +1648,7 @@ function g_difCuadrados(r, lvl, opts) {
   const v = r.pick(['x', 'x', 'x', 'a', 'y', 'm', 't']); const [p, q] = twoVars(r);
   let A, B, gcf = null;
   if (opts.geo) { let k, b; do { k = r.int(2, 9); b = r.int(1, 4); } while (gcd(k, b) > 1); A = Mo(b, { [v]: 1 }); B = K(k); const F1 = A.sub(B), F2 = A.add(B); const poly = F1.mul(F2);
-    return mkFactorProblem({ poly, factors: [F1, F2], instr: 'El <b>área</b> de un rectángulo es <b>' + fs(poly) + '</b>. ¿Qué expresiones representan su <b>largo</b> y su <b>ancho</b>? Escribe el área como producto.', expr: '', figure: svgRectQ('?', '?', 'Área = ' + fs(poly)), vars: [v], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
+    return mkFactorProblem({ poly, factors: [F1, F2], instr: 'El <b>área</b> de un rectángulo es <b>' + M(fs(poly)) + '</b>. ¿Qué expresiones representan su <b>largo</b> y su <b>ancho</b>? Escribe el área como producto.', expr: '', figure: svgRectQ('?', '?', 'Área = ' + fs(poly)), vars: [v], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
       hints: ['Área = largo × ancho: hay que factorizar.', 'Es una resta de dos cuadrados perfectos: ' + M(fs(A.mul(A))) + ' y ' + M(fs(B.mul(B))) + '.', 'Diferencia de cuadrados: ' + M('a^2 ' + MINUS + ' b^2 = (a + b)(a ' + MINUS + ' b)') + ' con a = ' + fs(A) + ' y b = ' + fs(B)],
       solution: ['Es una diferencia de cuadrados: ' + M(fs(poly) + ' = (' + fs(A) + ')^2 ' + MINUS + ' (' + fs(B) + ')^2'), 'Se factoriza como (a + b)(a − b): ' + M(par(F2) + par(F1)), 'Comprobamos: ' + M(par(F2) + par(F1) + ' = ' + fs(poly))], answer: M(par(F2) + par(F1)), fallback: 'Diferencia de cuadrados: a² − b² = (a + b)(a − b).' });
   }
@@ -1652,6 +1768,390 @@ function g_metodoFact(r, lvl) {
     solution: [cue[k] + ' → ' + labels[k] + '.'], answer: labels[k], fallbackTag: 'tipo de factorización', fallback: 'Fíjate en el número de términos y en la forma del polinomio.' });
 }
 
+// =========================================================
+//  ETAPA 3 · Ecuaciones lineales en una y dos variables
+// =========================================================
+function g_conceptoEc(r, lvl) {
+  const v = 'x';
+  const a = r.nz(2, 9) * (r.chance(0.5) ? 1 : -1);
+  const b = r.nz(1, 15) * (r.chance(0.5) ? 1 : -1);
+  const c = r.nz(1, 20) * (r.chance(0.5) ? 1 : -1);
+  const lhs = Mo(a, { [v]: 1 }).add(K(b));
+  const rhs = K(c);
+  if (lvl === 3 && r.chance(0.5)) {
+    const k = r.nz(2, 6), p = r.nz(1, 9);
+    const type = r.pick(['condicional', 'identidad', 'sinsol']);
+    const NAMES3 = { condicional: 'Condicional (una solución)', identidad: 'Identidad (infinitas soluciones)', sinsol: 'Sin solución' };
+    let left, right, why;
+    if (type === 'identidad') {
+      left = k + '(' + v + ' + ' + p + ')'; right = fs(Mo(k, { [v]: 1 }).add(K(k * p)));
+      why = 'Al simplificar, ambos miembros quedan exactamente iguales para cualquier valor de ' + v + '.';
+    } else if (type === 'sinsol') {
+      left = fs(Mo(k, { [v]: 1 }).add(K(p))); right = fs(Mo(k, { [v]: 1 }).add(K(p + r.nz(1, 9))));
+      why = 'Al simplificar, la variable se cancela y queda una igualdad falsa entre dos números distintos.';
+    } else {
+      left = fs(Mo(k, { [v]: 1 }).add(K(p))); right = fs(K(k * r.nz(1, 6) + p));
+      why = 'Solo hay un valor de ' + v + ' que hace verdadera la igualdad.';
+    }
+    const name = NAMES3[type];
+    const opts = withOptions(r, [{ h: name }], Object.values(NAMES3).filter((n2) => n2 !== name).map((h) => ({ h, fb: why })), 3);
+    return P({ kind: 'choice', dim: 'reconoce', instr: '¿Qué tipo de ecuación es esta?', expr: M(left + ' = ' + right), options: opts,
+      hints: ['Simplifica ambos miembros y compáralos.', 'Si la variable desaparece y queda algo falso (como 5 = 8), no tiene solución.', 'Si la variable desaparece y queda algo verdadero (como 6 = 6), tiene infinitas soluciones.'],
+      solution: [why], answer: name, fallbackTag: 'despeje', fallback: why });
+  }
+  const kind = r.pick(['var', 'coef', 'const', 'miembro1', 'miembro2', 'grado']);
+  const eqStr = fs(lhs) + ' = ' + fs(rhs);
+  let instr, opts, ans;
+  if (kind === 'var') {
+    instr = 'En esta ecuación, ¿cuál es la <b>variable</b> (incógnita)?';
+    opts = withOptions(r, [{ h: v }], [{ h: String(a) }, { h: String(b) }, { h: String(c) }].map((o) => ({ h: o.h, fb: 'Ese es un número, no la letra desconocida.' })), 4);
+    ans = v;
+  } else if (kind === 'coef') {
+    instr = 'En el primer miembro, ¿cuál es el <b>coeficiente</b> de ' + v + '?';
+    opts = withOptions(r, [{ h: String(a) }], [{ h: v, fb: 'Esa es la variable, no su coeficiente.' }, { h: String(b), fb: 'Ese es el término independiente, no el coeficiente.' }, { h: String(c) }, { h: String(-a) }], 4);
+    ans = String(a);
+  } else if (kind === 'const') {
+    instr = 'En el primer miembro, ¿cuál es el <b>término independiente</b>?';
+    opts = withOptions(r, [{ h: String(b) }], [{ h: v, fb: 'Esa es la variable.' }, { h: String(a), fb: 'Ese es el coeficiente de ' + v + '.' }, { h: String(c) }, { h: String(-b) }], 4);
+    ans = String(b);
+  } else if (kind === 'miembro1') {
+    instr = '¿Cuál es el <b>primer miembro</b> de la ecuación?';
+    opts = withOptions(r, [{ h: fs(lhs) }], [{ h: fs(rhs) }, { h: v }], 3);
+    ans = fs(lhs);
+  } else if (kind === 'miembro2') {
+    instr = '¿Cuál es el <b>segundo miembro</b> de la ecuación?';
+    opts = withOptions(r, [{ h: fs(rhs) }], [{ h: fs(lhs) }, { h: v }], 3);
+    ans = fs(rhs);
+  } else {
+    instr = '¿Cuál es el <b>grado</b> de esta ecuación?';
+    opts = withOptions(r, [{ h: '1' }], [{ h: '0', fb: 'Grado 0 sería si no hubiera variable.' }, { h: '2', fb: 'Grado 2 sería si la variable estuviera al cuadrado.' }, { h: '3' }], 4);
+    ans = '1';
+  }
+  return P({ kind: 'choice', dim: 'reconoce', instr, expr: M(eqStr), options: opts.map((o) => ({ ...o, h: M(o.h) })),
+    hints: ['Recuerda: la variable es la letra desconocida, el coeficiente es el número que la acompaña y el término independiente es el número solo.', 'El primer miembro es todo lo que está antes del signo =; el segundo, todo lo que está después.'],
+    solution: ['Primer miembro: ' + M(fs(lhs)) + '. Segundo miembro: ' + M(fs(rhs)) + '.'], answer: M(ans),
+    fallbackTag: 'despeje', fallback: 'Repasa las partes de una ecuación: variable, coeficiente, término independiente, primer y segundo miembro.' });
+}
+
+function g_ecBasica(r, lvl) {
+  const v = 'x';
+  const form = lvl === 1 ? r.pick(['suma', 'resta', 'mult', 'div']) : 'axb';
+  let x, lhs, rhs;
+  if (form === 'suma') { const a = r.nz(1, 12); x = r.nz(-15, 15); lhs = fs(Mo(1, { [v]: 1 }).add(K(a))); rhs = String(x + a); }
+  else if (form === 'resta') { const a = r.nz(1, 12); x = r.nz(-15, 15); lhs = fs(Mo(1, { [v]: 1 }).sub(K(a))); rhs = String(x - a); }
+  else if (form === 'mult') { const a = r.nz(2, 9); x = r.nz(-9, 9); lhs = fs(Mo(a, { [v]: 1 })); rhs = String(a * x); }
+  else if (form === 'div') { const a = r.nz(2, 9), k = r.nz(-9, 9); x = a * k; lhs = frac(v, String(a)); rhs = String(k); }
+  else { const a = r.nz(2, lvl === 2 ? 9 : 12) * (lvl === 3 && r.chance(0.4) ? -1 : 1); const b = r.nz(-15, 15); x = r.nz(-12, 12); lhs = fs(Mo(a, { [v]: 1 }).add(K(b))); rhs = String(a * x + b); }
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Resuelve la ecuación y encuentra el valor de ' + v + '.', expr: M(lhs + ' = ' + rhs), expected: K(x), vars: [v],
+    hints: ['Aplica el principio de equivalencia: lo que le hagas a un lado, hazlo también al otro.', 'Deja la variable sola en un lado usando la operación inversa a la que la acompaña.', 'Comprueba sustituyendo tu resultado en la ecuación original.'],
+    solution: [mline(lhs + ' = ' + rhs), 'Despeja ' + v + ' usando la operación inversa a cada lado.', mline(v + ' = ' + x)],
+    answer: M(String(x)), fallbackTag: 'despeje', fallback: 'Todavía no. Aísla la variable aplicando la operación inversa en ambos lados.' });
+}
+
+function g_terminosEc(r, lvl) {
+  const v = 'x';
+  const c1 = r.nz(2, lvl === 1 ? 6 : 9), c2 = r.nz(1, lvl === 1 ? 5 : 8);
+  let a = c1 - c2; if (a === 0) a = c1 + 1 - c2;
+  const b = r.nz(-12, 12) * (r.chance(0.5) ? 1 : -1);
+  const x = r.nz(-9, 9);
+  const rhs = a * x + b;
+  const terms = r.chance(0.5) ? [Mo(c1, { [v]: 1 }), K(b), Mo(-c2, { [v]: 1 })] : [K(b), Mo(c1, { [v]: 1 }), Mo(-c2, { [v]: 1 })];
+  const lhsStr = fmtList(terms);
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Primero reduce los términos semejantes y después resuelve la ecuación.',
+    expr: M(lhsStr + ' = ' + rhs), expected: K(x), vars: [v],
+    hints: ['Junta primero los términos con ' + v + ' entre sí (súmalos con su signo).', 'Después aplica el principio de equivalencia para despejar ' + v + '.', 'Comprueba sustituyendo tu respuesta en la ecuación original.'],
+    solution: [mline(lhsStr + ' = ' + rhs), 'Reducimos términos semejantes: ' + mline(fs(Mo(a, { [v]: 1 }).add(K(b))) + ' = ' + rhs), mline(v + ' = ' + x)],
+    answer: M(String(x)), fallbackTag: 'semejantes', fallback: 'Junta primero los términos con ' + v + ' (súmalos con su signo) y después despeja.' });
+}
+
+function g_ecParentesis(r, lvl) {
+  const v = 'x';
+  const k = r.nz(2, lvl === 1 ? 6 : 9) * (lvl === 3 && r.chance(0.3) ? -1 : 1);
+  const p = r.nz(-9, 9);
+  const x = r.nz(-9, 9);
+  let m = 0, extra = 0;
+  if (lvl >= 2) { m = r.nz(1, 7) * (r.chance(0.5) ? 1 : -1); if (m === k) m += 1; }
+  if (lvl === 3) extra = r.nz(-8, 8);
+  const lhsBase = k + '(' + v + (p >= 0 ? ' + ' + p : ' ' + MINUS + ' ' + (-p)) + ')';
+  const lhsStr = extra ? (extra > 0 ? extra + ' + ' + lhsBase : MINUS + ' ' + Math.abs(extra) + ' + ' + lhsBase) : lhsBase;
+  const q = extra + k * x + k * p - m * x;
+  const rhsStr = m ? fs(Mo(m, { [v]: 1 }).add(K(q))) : String(q);
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Aplica la propiedad distributiva y resuelve la ecuación.',
+    expr: M(lhsStr + ' = ' + rhsStr), expected: K(x), vars: [v],
+    hints: ['Multiplica el número de afuera por cada término que está dentro del paréntesis.', 'Junta los términos semejantes en cada lado antes de despejar.', 'Aplica el principio de equivalencia para dejar la variable sola.'],
+    solution: [mline(lhsStr + ' = ' + rhsStr), 'Distribuimos: ' + mline(fs(Mo(k, { [v]: 1 }).add(K(k * p + extra))) + ' = ' + rhsStr), mline(v + ' = ' + x)],
+    answer: M(String(x)), fallbackTag: 'distributiva', fallback: 'Multiplica el número de afuera por todo lo que está dentro del paréntesis antes de despejar.' });
+}
+
+function g_ecAmbosLados(r, lvl) {
+  const v = 'x';
+  const a = r.nz(2, lvl === 1 ? 7 : 12) * (r.chance(0.5) ? 1 : -1);
+  let c = r.nz(2, lvl === 1 ? 7 : 12) * (r.chance(0.5) ? 1 : -1);
+  if (c === a) c += 1;
+  const b = r.nz(-15, 15);
+  const x = r.nz(-9, 9);
+  const d = (a - c) * x + b;
+  const lhsTerms = r.chance(0.5) ? [Mo(a, { [v]: 1 }), K(b)] : [K(b), Mo(a, { [v]: 1 })];
+  const rhsTerms = r.chance(0.5) ? [Mo(c, { [v]: 1 }), K(d)] : [K(d), Mo(c, { [v]: 1 })];
+  const lhsStr = fmtList(lhsTerms), rhsStr = fmtList(rhsTerms);
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'La variable aparece en los dos lados. Resuelve la ecuación.',
+    expr: M(lhsStr + ' = ' + rhsStr), expected: K(x), vars: [v],
+    hints: ['Junta todos los términos con ' + v + ' en un solo lado (súmalos o réstalos en ambos miembros).', 'Junta los números solos en el otro lado.', 'Al final, divide para dejar sola a la variable.'],
+    solution: [mline(lhsStr + ' = ' + rhsStr), 'Pasamos los términos con ' + v + ' a un lado y los números al otro: ' + mline(fs(Mo(a - c, { [v]: 1 })) + ' = ' + (d - b)), mline(v + ' = ' + x)],
+    answer: M(String(x)), fallbackTag: 'despeje', fallback: 'Junta los términos con la variable en un mismo lado y los números en el otro; recuerda cambiar el signo al pasarlos.' });
+}
+
+function g_ecFracciones(r, lvl) {
+  const v = 'x';
+  const sg = (n) => (n >= 0 ? ' + ' + n : ' ' + MINUS + ' ' + (-n));
+  if (lvl === 1) {
+    const a = r.nz(2, 9), q = r.nz(-9, 9), b = r.nz(-9, 9);
+    const x = a * q, c = q + b;
+    const lhsStr = frac(v, String(a)) + sg(b);
+    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Resuelve la ecuación con fracciones.', expr: M(lhsStr + ' = ' + c), expected: K(x), vars: [v],
+      hints: ['Primero deja sola la fracción: pasa el número que se suma o resta al otro lado.', 'Después multiplica ambos lados por el denominador.', 'Comprueba sustituyendo tu respuesta.'],
+      solution: [mline(lhsStr + ' = ' + c), 'Aislamos la fracción: ' + mline(frac(v, String(a)) + ' = ' + q), 'Multiplicamos ambos lados por ' + a + ': ' + mline(v + ' = ' + x)],
+      answer: M(String(x)), fallbackTag: 'fracciones', fallback: 'Primero deja la fracción sola de un lado; después multiplica ambos lados por el denominador.' });
+  }
+  if (lvl === 2) {
+    const a = r.nz(2, 9), q = r.nz(-9, 9), p = r.nz(-9, 9);
+    const x = a * q - p;
+    const inner = v + sg(p);
+    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Resuelve la ecuación con fracciones.', expr: M(frac(inner, String(a)) + ' = ' + q), expected: K(x), vars: [v],
+      hints: ['Multiplica ambos lados por el denominador para quitar la fracción.', 'Después despeja la variable con el principio de equivalencia.', 'Comprueba tu respuesta sustituyéndola.'],
+      solution: [mline(frac(inner, String(a)) + ' = ' + q), 'Multiplicamos ambos lados por ' + a + ': ' + mline(inner + ' = ' + (a * q)), mline(v + ' = ' + x)],
+      answer: M(String(x)), fallbackTag: 'fracciones', fallback: 'Multiplica ambos lados por el denominador y después despeja la variable.' });
+  }
+  const a = r.nz(2, 9), s = r.nz(-9, 9), p = r.nz(-9, 9), b = r.nz(-9, 9);
+  const c = s + b, x = a * s - p, inner = v + sg(p);
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Resuelve la ecuación con fracciones.', expr: M(frac(inner, String(a)) + sg(b) + ' = ' + c), expected: K(x), vars: [v],
+    hints: ['Primero deja sola la fracción, pasando el número que se suma o resta al otro lado.', 'Multiplica ambos lados por el denominador.', 'Termina de despejar la variable.'],
+    solution: [mline(frac(inner, String(a)) + sg(b) + ' = ' + c), 'Aislamos la fracción: ' + mline(frac(inner, String(a)) + ' = ' + s), 'Multiplicamos por ' + a + ': ' + mline(inner + ' = ' + (a * s)), mline(v + ' = ' + x)],
+    answer: M(String(x)), fallbackTag: 'fracciones', fallback: 'Aísla la fracción, multiplica por el denominador y termina de despejar.' });
+}
+
+function g_encuentraError(r) {
+  const v = 'x';
+  const TYPES = [
+    { tag: 'signos', label: 'Error de signo', build: () => {
+      const a = r.nz(2, 9), b = r.nz(2, 15), c = r.nz(2, 20);
+      return { steps: [M(a + v + ' ' + MINUS + ' ' + b + ' = ' + c), M(a + v + ' = ' + c + ' ' + MINUS + ' ' + b)],
+        why: 'Al pasar ' + MINUS + b + ' al otro lado del signo =, debe cambiar de signo y sumarse: el paso correcto es ' + a + v + ' = ' + c + ' + ' + b + ', no ' + a + v + ' = ' + c + ' ' + MINUS + ' ' + b + '.' };
+    } },
+    { tag: 'distributiva', label: 'Error al aplicar la propiedad distributiva', build: () => {
+      const k = r.nz(2, 9), p = r.nz(1, 9), c = r.nz(1, 30);
+      return { steps: [M(k + '(' + v + ' + ' + p + ') = ' + c), M(k + v + ' + ' + p + ' = ' + c)],
+        why: 'El ' + k + ' debe multiplicar a los dos términos del paréntesis: el paso correcto es ' + k + v + ' + ' + (k * p) + ' = ' + c + ', no ' + k + v + ' + ' + p + ' = ' + c + '.' };
+    } },
+    { tag: 'semejantes', label: 'Error al reducir términos semejantes', build: () => {
+      const c1 = r.nz(2, 9), c2 = r.nz(1, 8), b = r.nz(1, 15), c = r.nz(1, 30);
+      return { steps: [M(c1 + v + ' + ' + c2 + v + ' ' + MINUS + ' ' + b + ' = ' + c), M((c1 * c2) + v + ' ' + MINUS + ' ' + b + ' = ' + c)],
+        why: 'Los términos semejantes se suman, no se multiplican: ' + c1 + v + ' + ' + c2 + v + ' = ' + (c1 + c2) + v + ', no ' + (c1 * c2) + v + '.' };
+    } },
+    { tag: 'operación inversa', label: 'Error al usar la operación inversa', build: () => {
+      const b = r.nz(2, 15), c = r.nz(2, 20);
+      return { steps: [M(v + ' + ' + b + ' = ' + c), M(v + ' = ' + c + ' + ' + b)],
+        why: 'La operación inversa de sumar ' + b + ' es restar ' + b + ' (no volver a sumarlo): el paso correcto es ' + v + ' = ' + c + ' ' + MINUS + ' ' + b + '.' };
+    } },
+    { tag: 'despeje', label: 'Error al despejar la variable', build: () => {
+      const a = r.nz(2, 9), c = r.nz(2, 40);
+      return { steps: [M(a + v + ' = ' + c), M(v + ' = ' + a + '/' + c)],
+        why: 'Para despejar ' + v + ' hay que dividir el otro lado entre ' + a + ', no al revés: el paso correcto es ' + v + ' = ' + c + '/' + a + '.' };
+    } },
+    { tag: 'fracciones', label: 'Error con las fracciones', build: () => {
+      const a = r.nz(2, 9), c = r.nz(2, 9);
+      return { steps: [M(frac(v, String(a)) + ' = ' + c), M(v + ' = ' + c + '/' + a)],
+        why: 'Para quitar la fracción hay que multiplicar ambos lados por ' + a + ' (no dividir): el paso correcto es ' + v + ' = ' + (a * c) + '.' };
+    } },
+  ];
+  const chosen = r.pick(TYPES);
+  const built = chosen.build();
+  const options = r.shuffle(TYPES.map((t) => ({ h: t.label, ok: t.tag === chosen.tag, fb: t.tag === chosen.tag ? '' : built.why, tag: t.tag })));
+  return P({ kind: 'choice', dim: 'comprende', instr: 'Este procedimiento tiene un error. ¿De qué tipo es?',
+    expr: '<div class="mline">' + built.steps.join('</div><div class="mline">') + '</div>', options,
+    hints: ['Revisa cada paso: ¿se hizo lo mismo en los dos lados?', 'Compara el paso con la regla que le corresponde (signos, distributiva, términos semejantes, operación inversa, despeje o fracciones).'],
+    solution: [built.why], answer: chosen.label, fallbackTag: chosen.tag, fallback: built.why });
+}
+
+function g_aplicacion1(r) {
+  const TPL = [
+    () => { const base = r.nz(5, 20) * 5, rate = r.nz(2, 10) * 5, x = r.nz(2, 20); const total = base + rate * x;
+      return { instr: 'Un taxi cobra $' + base + ' de bandera más $' + rate + ' por cada kilómetro recorrido. Si un viaje costó $' + total + ', ¿cuántos kilómetros se recorrieron?', x }; },
+    () => { const s = r.nz(50, 400), w = r.nz(20, 100), x = r.nz(2, 20); const meta = s + w * x;
+      return { instr: 'Ana ya tenía $' + s + ' ahorrados y ahorra $' + w + ' cada semana. ¿Cuántas semanas necesita para llegar a $' + meta + '?', x }; },
+    () => { const d = r.nz(1, 15), x = r.nz(5, 40); const p = 2 * x - d;
+      return { instr: 'La edad de Pedro es el doble de la edad de su hermano, menos ' + d + ' años. Si Pedro tiene ' + p + ' años, ¿cuántos años tiene su hermano?', x }; },
+    () => { const x = r.nz(2, 20); const per = 8 * x;
+      return { instr: 'El largo de un rectángulo mide el triple de su ancho. Si el perímetro del rectángulo es ' + per + ' metros, ¿cuánto mide el ancho?', x }; },
+    () => { const d = r.nz(20, 300), x = r.nz(50, 900); const f = x - d;
+      return { instr: 'Un artículo tenía un descuento de $' + d + ' y se quedó en $' + f + '. ¿Cuál era su precio original?', x }; },
+    () => { const c = r.nz(2, 12), e = r.nz(50, 500), x = r.nz(20, 300); const m = e + c * x;
+      return { instr: 'Julia debe pagar $' + m + ' en ' + c + ' cuotas iguales, más un enganche de $' + e + '. ¿Cuánto es cada cuota?', x }; },
+  ];
+  const t = r.pick(TPL)();
+  return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: t.instr, expr: '', expected: K(t.x), vars: ['x'],
+    hints: ['Lee con calma: ¿qué te preguntan y qué información ya tienes?', 'Asigna una letra a lo que no conoces y plantea la ecuación con esa información.', 'Resuelve la ecuación con el principio de equivalencia.'],
+    solution: ['Definimos x = la cantidad que buscamos.', 'Planteamos la ecuación con los datos del problema.', 'Resolvemos y comprobamos que la respuesta tenga sentido en el contexto.'],
+    answer: M(String(t.x)), fallbackTag: 'despeje', fallback: 'Plantea primero la ecuación con los datos del problema y después resuélvela.' });
+}
+
+function g_plano(r, lvl) {
+  // kind:'point' — el estudiante coloca el punto haciendo clic en el plano (ver app.js: mountEx, kind 'point').
+  const range = lvl === 1 ? [-5, 5] : [-6, 6];
+  const max = lvl === 1 ? 5 : 6;
+  const x = r.nz(1, max) * (r.chance(0.5) ? 1 : -1);
+  const y = r.nz(1, max) * (r.chance(0.5) ? 1 : -1);
+  const planeOpts = { range, quadLabels: lvl === 1 };
+  const fig = svgPlane(planeOpts);
+  const qOf = (px, py) => (px > 0 && py > 0 ? 'I' : px < 0 && py > 0 ? 'II' : px < 0 && py < 0 ? 'III' : 'IV');
+  return P({ kind: 'point', dim: 'reconoce', instr: 'Coloca el punto (' + x + ', ' + y + ') en el plano. Toca el lugar exacto.', expr: '', figure: fig, planeOpts, range,
+    expected: { x, y },
+    hints: ['El primer número (x) dice si el punto está a la derecha (+) o a la izquierda (−) del centro.', 'El segundo número (y) dice si está arriba (+) o abajo (−).', 'Cuenta ' + Math.abs(x) + ' unidades en x y después ' + Math.abs(y) + ' unidades en y, y marca ahí.'],
+    solution: ['El punto (' + x + ', ' + y + ') está en el cuadrante ' + qOf(x, y) + ': ' + Math.abs(x) + ' unidades ' + (x >= 0 ? 'a la derecha' : 'a la izquierda') + ' del origen y ' + Math.abs(y) + ' unidades ' + (y >= 0 ? 'hacia arriba' : 'hacia abajo') + '.'],
+    answer: '(' + x + ', ' + y + ')', fallbackTag: 'plano cartesiano', fallback: 'Cuenta desde el origen: primero cuánto se mueve en x, después cuánto en y.' });
+}
+
+function g_graficar(r, lvl) {
+  const v = 'x';
+  if (lvl === 1) {
+    let m = r.nz(-6, 6); if (m === 0) m = r.pick([-1, 1, 2, -2]);
+    const b = r.nz(-9, 9);
+    const xv = r.nz(-6, 6);
+    const y = m * xv + b;
+    const eqStr = 'y = ' + fs(Mo(m, { [v]: 1 }).add(K(b)));
+    return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Completa la tabla de valores: si ' + v + ' = ' + xv + ', ¿cuánto vale y?', expr: M(eqStr), expected: K(y), vars: ['y'],
+      hints: ['Sustituye el valor de x que te dan y opera con cuidado los signos.', 'Multiplica primero la pendiente por x y después suma el término independiente.', 'El resultado es el valor de y para ese punto de la recta.'],
+      solution: [M(eqStr), 'Sustituimos ' + v + ' = ' + xv + '.', M('y = ' + y)],
+      answer: M(String(y)), fallbackTag: 'gráficas lineales', fallback: 'Sustituye el valor de x con cuidado en los signos y calcula y.' });
+  }
+  if (lvl === 2) {
+    // kind:'point2' — en vez de un único punto objetivo (que sería arbitrario, porque una recta tiene
+    // infinitos puntos válidos), el estudiante coloca DOS puntos DISTINTOS con clics sucesivos sobre el
+    // mismo plano; checkPoint2 (check.js) acepta cualquier par que cumpla y = m·x + b. Es el enfoque más
+    // simple que sigue permitiendo verificar "cualquier punto que cumpla la ecuación", sin inventar un
+    // tercer kind de respuesta múltiple.
+    let m = r.nz(-3, 3); if (m === 0) m = r.pick([-1, 1, 2, -2]);
+    const b = r.nz(-6, 6);
+    const range = [-6, 6];
+    const eqStr = 'y = ' + fs(Mo(m, { x: 1 }).add(K(b)));
+    const planeOpts = { range };
+    const fig = svgPlane(planeOpts);
+    return P({ kind: 'point2', dim: 'resuelve', instr: 'La recta es ' + M(eqStr) + '. Verifica la ecuación: toca DOS puntos distintos que estén sobre ella.', expr: '', figure: fig, planeOpts, range,
+      expected: { m, b },
+      hints: ['Elige un valor de x, sustitúyelo en la ecuación y obtén y. Ese es un punto.', 'Repite con otro valor de x distinto para el segundo punto.', 'Por ejemplo, con x = 0: y = ' + b + '.'],
+      solution: ['Cualquier punto que cumpla y = ' + m + 'x + ' + b + ' está sobre la recta.', 'Por ejemplo, con x = 0: y = ' + b + '. Con x = 1: y = ' + (m + b) + '.'],
+      answer: 'Dos puntos que cumplan ' + eqStr, fallbackTag: 'gráficas lineales', fallback: 'Sustituye un valor de x en la ecuación para hallar y, y repite con otro x distinto.' });
+  }
+  // lvl 3: kind:'choice' — "elige la gráfica correcta" entre miniaturas SVG generadas con svgPlane.
+  let m = r.nz(-3, 3); if (m === 0) m = r.pick([-1, 1, 2, -2]);
+  const b = r.nz(-6, 6);
+  const range = [-6, 6];
+  const eqStr = 'y = ' + fs(Mo(m, { x: 1 }).add(K(b)));
+  const mkThumb = (mm, bb) => svgPlane({ range, lines: [{ m: mm, b: bb, color: 'c1' }] });
+  const cand = [];
+  const dSlope = m + (r.nz(1, 2) * (r.chance(0.5) ? 1 : -1)); cand.push({ m: dSlope || (m + 1), b });
+  const dB = b + r.nz(2, 4) * (r.chance(0.5) ? 1 : -1); cand.push({ m, b: dB });
+  const negM = -m; cand.push({ m: negM || 1, b });
+  const wrongDefs = cand.filter((d) => (d.m !== m || d.b !== b));
+  // nota: fx() (app.js) no escapa HTML al renderizar options[i].h, así que aquí podemos incrustar SVG crudo directamente.
+  const options = withOptions(r, [{ h: mkThumb(m, b) }], wrongDefs.map((d) => ({ h: mkThumb(d.m, d.b), fb: 'Esa gráfica no corresponde a ' + M(eqStr) + '.', tag: 'gráficas lineales' })), 4);
+  return P({ kind: 'choice', dim: 'reconoce', instr: 'Verifica: ¿cuál de estas gráficas corresponde a la recta ' + M(eqStr) + '?', expr: '', options,
+    hints: ['Fíjate en dónde cruza el eje y: ese es el valor de b.', 'Fíjate en la inclinación: si sube o baja al avanzar hacia la derecha, y qué tan rápido.', 'El punto (0, ' + b + ') debe estar sobre la recta correcta.'],
+    solution: ['La recta ' + M(eqStr) + ' cruza el eje y en (0, ' + b + ') y tiene pendiente ' + m + '.'],
+    answer: 'La gráfica de ' + eqStr, fallbackTag: 'gráficas lineales', fallback: 'Compara dónde cruza el eje y y la inclinación de cada recta con la ecuación dada.' });
+}
+
+function g_sistemaGrafico(r, lvl) {
+  const kase = lvl === 1 ? r.pick(['unica', 'paralelas']) : r.pick(['unica', 'paralelas', 'coincidentes']);
+  let m1, b1, m2, b2, xi, yi;
+  if (kase === 'unica') {
+    xi = r.nz(-4, 4); yi = r.nz(-4, 4);
+    m1 = r.nz(-3, 3) || 1; b1 = yi - m1 * xi;
+    do { m2 = r.nz(-3, 3) || 1; } while (m2 === m1);
+    b2 = yi - m2 * xi;
+  } else if (kase === 'paralelas') {
+    m1 = r.nz(-3, 3) || 1; b1 = r.nz(-6, 6); m2 = m1;
+    do { b2 = r.nz(-6, 6); } while (b2 === b1);
+  } else { m1 = r.nz(-3, 3) || 1; b1 = r.nz(-6, 6); m2 = m1; b2 = b1; }
+  const eq1 = 'y = ' + fs(Mo(m1, { x: 1 }).add(K(b1))), eq2 = 'y = ' + fs(Mo(m2, { x: 1 }).add(K(b2)));
+  const range = [-6, 6];
+  const planeOpts = { range, lines: [{ m: m1, b: b1, color: 'c1' }, { m: m2, b: b2, color: 'c2' }] };
+  const fig = svgPlane(planeOpts);
+  if (kase === 'unica') {
+    // Solución única: en vez de clasificar, el estudiante toca el punto de intersección (kind:'point').
+    return P({ kind: 'point', dim: 'resuelve', instr: 'Estas dos rectas del sistema se cortan en un punto. Encuéntralo y tócalo en el plano.',
+      expr: '<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>', figure: fig, planeOpts, range,
+      expected: { x: xi, y: yi },
+      hints: ['El punto de intersección es la solución del sistema: cumple las dos ecuaciones a la vez.', 'Resuélvelo algebraicamente (sustitución o suma y resta) y después ubícalo.', 'La solución es x = ' + xi + ', y = ' + yi + '.'],
+      solution: ['Las rectas se cortan en (' + xi + ', ' + yi + '), la solución del sistema.'],
+      answer: '(' + xi + ', ' + yi + ')', fallbackTag: 'sistemas gráficos', fallback: 'Resuelve el sistema algebraicamente para hallar el punto de intersección y luego ubícalo.' });
+  }
+  const NAMES = { unica: 'Una solución (las rectas se cortan en un punto)', paralelas: 'No tiene solución (las rectas son paralelas)', coincidentes: 'Infinitas soluciones (son la misma recta)' };
+  const opts = withOptions(r, [{ h: NAMES[kase] }], Object.keys(NAMES).filter((k) => k !== kase).map((k) => ({ h: NAMES[k] })), 3);
+  return P({ kind: 'choice', dim: 'reconoce', instr: 'Observa las dos rectas del sistema. ¿Qué tipo de solución tiene?',
+    expr: '<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>', figure: fig, options: opts,
+    hints: ['Si las rectas se cruzan en un punto, hay una única solución.', 'Si son paralelas (misma pendiente, distinto cruce con el eje y), no hay solución.', 'Si son exactamente la misma recta, hay infinitas soluciones.'],
+    solution: [NAMES[kase]], answer: NAMES[kase],
+    fallbackTag: 'sistemas gráficos', fallback: 'Compara las pendientes: si son iguales pero cruzan el eje y en puntos distintos, son paralelas; si son idénticas, son la misma recta.' });
+}
+
+function mkSys(r, lvl) {
+  const range = lvl === 1 ? 6 : lvl === 2 ? 9 : 12;
+  const cmax = lvl === 1 ? 5 : lvl === 2 ? 7 : 9;
+  const x0 = r.nz(-range, range), y0 = r.nz(-range, range);
+  let a1, b1, a2, b2, det;
+  do { a1 = r.nz(-cmax, cmax) || 1; b1 = r.nz(-cmax, cmax) || 1; a2 = r.nz(-cmax, cmax) || 1; b2 = r.nz(-cmax, cmax) || 1; det = a1 * b2 - a2 * b1; } while (det === 0);
+  return { x0, y0, a1, b1, c1: a1 * x0 + b1 * y0, a2, b2, c2: a2 * x0 + b2 * y0 };
+}
+function sysEqStr(a, b, c) { return fs(Mo(a, { x: 1 }).add(Mo(b, { y: 1 }))) + ' = ' + c; }
+
+function g_sistemaSustitucion(r, lvl) {
+  const s = mkSys(r, lvl);
+  const eq1 = sysEqStr(s.a1, s.b1, s.c1), eq2 = sysEqStr(s.a2, s.b2, s.c2);
+  return P({ kind: 'sys', dim: 'resuelve', instr: 'Resuelve el sistema por el método de <b>sustitución</b>.',
+    expr: '<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>', expected: { x: K(s.x0), y: K(s.y0) }, vars: ['x', 'y'],
+    hints: ['Despeja una variable en una de las ecuaciones.', 'Sustituye esa expresión en la otra ecuación y resuelve.', 'Con el valor que obtengas, regresa a la ecuación despejada para hallar la otra variable.'],
+    solution: ['<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>', 'Despejamos una variable de una ecuación y la sustituimos en la otra.',
+      'Resolviendo obtenemos x = ' + s.x0 + '.', 'Sustituimos en una de las ecuaciones para hallar y = ' + s.y0 + '.'],
+    answer: 'x = ' + s.x0 + ', y = ' + s.y0, fallbackTag: 'sustitución', fallback: 'Despeja una variable en una ecuación, sustitúyela en la otra y resuelve paso a paso.' });
+}
+
+function g_sistemaSumaResta(r, lvl) {
+  const s = mkSys(r, lvl);
+  const eq1 = sysEqStr(s.a1, s.b1, s.c1), eq2 = sysEqStr(s.a2, s.b2, s.c2);
+  const k1 = s.a2, k2 = -s.a1;
+  const nb1 = s.b1 * k1, nc1 = s.c1 * k1, nb2 = s.b2 * k2, nc2 = s.c2 * k2;
+  const sumB = nb1 + nb2, sumC = nc1 + nc2;
+  const eq1b = sysEqStr(s.a1 * k1, nb1, nc1), eq2b = sysEqStr(s.a2 * k2, nb2, nc2);
+  return P({ kind: 'sys', dim: 'resuelve', instr: 'Resuelve el sistema por el método de <b>suma y resta</b> (eliminación).',
+    expr: '<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>', expected: { x: K(s.x0), y: K(s.y0) }, vars: ['x', 'y'],
+    hints: ['Multiplica una o ambas ecuaciones para que una variable tenga coeficientes opuestos.', 'Suma las dos ecuaciones: esa variable se cancela.', 'Resuelve la variable que queda y sustituye para hallar la otra.'],
+    solution: ['<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>',
+      'Multiplicamos la primera ecuación por ' + k1 + ' y la segunda por ' + k2 + ' para que x se cancele: ' + '<div class="mline">' + M(eq1b) + '</div><div class="mline">' + M(eq2b) + '</div>',
+      'Sumamos: ' + mline(fs(Mo(sumB, { y: 1 })) + ' = ' + sumC),
+      'y = ' + s.y0 + '. Sustituimos en una ecuación original para obtener x = ' + s.x0 + '.'],
+    answer: 'x = ' + s.x0 + ', y = ' + s.y0, fallbackTag: 'eliminación', fallback: 'Multiplica las ecuaciones para que una variable se cancele al sumarlas, resuelve la otra y sustituye.' });
+}
+
+function g_aplicacionSistema(r) {
+  const TPL = [
+    () => { let p1 = r.nz(3, 15) * 10, p2 = r.nz(3, 15) * 10; if (p1 === p2) p2 += 10; const x = r.nz(5, 60), y = r.nz(5, 60); const n = x + y, total = p1 * x + p2 * y;
+      return { instr: 'En un evento se vendieron dos tipos de boletos: uno a $' + p1 + ' y otro a $' + p2 + '. En total se vendieron ' + n + ' boletos y se recaudaron $' + total + '. ¿Cuántos boletos de $' + p1 + ' y cuántos de $' + p2 + ' se vendieron?', x, y }; },
+    () => { let p1 = r.nz(15, 60), p2 = r.nz(15, 60); if (p1 === p2) p2 += 5; const x = r.nz(3, 25), y = r.nz(3, 25); const n = x + y, total = p1 * x + p2 * y;
+      return { instr: 'En una frutería se vendieron ' + n + ' kg entre manzanas y naranjas. El kilogramo de manzana cuesta $' + p1 + ' y el de naranja $' + p2 + '. Si la venta total fue de $' + total + ', ¿cuántos kilogramos se vendieron de cada fruta?', x, y }; },
+    () => { const d = r.nz(2, 20), x = r.nz(5, 40), y = x + d, sum = x + y;
+      return { instr: 'La suma de las edades de dos hermanos es ' + sum + ' años. El mayor tiene ' + d + ' años más que el menor. ¿Qué edad tiene cada uno? (x = menor, y = mayor)', x, y }; },
+    () => { const y = r.nz(3, 15), diff = r.nz(2, 10), x = y + diff, sum = x + y;
+      // y se elige primero y diff siempre es positivo, así x = y + diff SIEMPRE es mayor que y (x > y, nunca x <= y).
+      return { instr: 'Dos números suman ' + sum + ' y su diferencia es ' + diff + '. ¿Cuáles son los números? (x = mayor, y = menor)', x, y }; },
+  ];
+  const t = r.pick(TPL)();
+  return P({ kind: 'sys', dim: 'resuelve', instr: t.instr, expr: '', expected: { x: K(t.x), y: K(t.y) }, vars: ['x', 'y'],
+    hints: ['Define una letra para cada cantidad desconocida.', 'Traduce la información del problema en dos ecuaciones.', 'Resuelve el sistema por el método que prefieras (sustitución o suma y resta).'],
+    solution: ['Definimos x y y como las dos cantidades que buscamos.', 'Planteamos un sistema de dos ecuaciones con la información del problema.', 'Resolvemos el sistema y comprobamos que la solución tenga sentido.'],
+    answer: 'x = ' + t.x + ', y = ' + t.y, fallbackTag: 'planteamiento de sistemas', fallback: 'Plantea las dos ecuaciones con la información del problema y resuelve el sistema paso a paso.' });
+}
+
 // ---- preguntas de comprensión (¿por qué funciona?)
 const WHY = {
   semejantes: [
@@ -1695,6 +2195,9 @@ const GENS = {
   divMon: g_divMon, divPolMon: g_divPolMon, divPol: g_divPol, perimetro: g_perimetro,
   signos: g_signos, exponentes: g_exponentes, multMon: g_multMon, distributiva: g_distributiva, multPol: g_multPol, cuadrado: g_cuadrado, conjugados: g_conjugados, cubo: g_cubo, notables: g_notables,
   mfc: g_mfc, factorComun: g_factorComun, difCuadrados: g_difCuadrados, tcp: g_tcp, trinomio1: g_trinomio1, trinomio2: g_trinomio2, cubos: g_cubos, metodoFact: g_metodoFact, comprende: g_comprende,
+  conceptoEc: g_conceptoEc, ecBasica: g_ecBasica, terminosEc: g_terminosEc, ecParentesis: g_ecParentesis, ecAmbosLados: g_ecAmbosLados, ecFracciones: g_ecFracciones,
+  encuentraError: g_encuentraError, aplicacion1: g_aplicacion1, planoCartesiano: g_plano, graficar: g_graficar, sistemaGrafico: g_sistemaGrafico,
+  sistemaSustitucion: g_sistemaSustitucion, sistemaSumaResta: g_sistemaSumaResta, aplicacionSistema: g_aplicacionSistema,
 };
 function makeProblem(skill, level, seed, opts) {
   opts = opts || {};
@@ -1706,7 +2209,7 @@ function makeProblem(skill, level, seed, opts) {
   return p;
 }
 
-module.exports = { makeProblem, GENS, svgAreaModel, svgPoly, svgRectQ, svgCube, SHAPES, polyDivide, esc2, fmtList, par, grouped };
+module.exports = { makeProblem, GENS, svgAreaModel, svgPoly, svgRectQ, svgCube, svgPlane, planeGeom, SHAPES, polyDivide, esc2, fmtList, par, grouped };
 
 };
 __M["content"]=function(module,exports){var require=__req;
@@ -1731,10 +2234,28 @@ const LESSON_VIDEOS = {
   factorComun: { title: "FACTORIZACION POR FACTOR COMUN Super facil", youtubeId: "BygK11QxQnA" },
   diferenciaCuadrados: { title: "FACTORIZAR DIFERENCIA DE CUADRADOS Super facil", youtubeId: "esbREDCXTpM" },
   trinomios: { title: "FACTORIZAR UN TRINOMIO CUADRADO PERFECTO Super facil", youtubeId: "TKo7NtIilWM" },
-  cubos: { title: "SUMA Y DIFERENCIA DE CUBOS PERFECTOS  EJERCICIOS RESUELTOS", youtubeId: "Vu5cDM71WL4" }
+  cubos: { title: "SUMA Y DIFERENCIA DE CUBOS PERFECTOS  EJERCICIOS RESUELTOS", youtubeId: "Vu5cDM71WL4" },
+  // --- Etapa 3 (Daniel Carreón) ---
+  conceptoEc: { title: "ECUACIONES DE PRIMER GRADO Super facil - Para principiantes", youtubeId: "IHblqjW8RY8" },
+  ecBasica: { title: "ECUACIONES DE PRIMER GRADO Super facil - Para principiantes", youtubeId: "IHblqjW8RY8" },
+  // Video de refuerzo/alternativo para ecuaciones básicas (principio de equivalencia); no se asigna como video principal de ninguna lección.
+  ecBasicaEquivalencia: { title: "ECUACIONES LINEALES Super facil - Para principiantes", youtubeId: "8rT0DZbYGEs" },
+  terminosEc: { title: "TERMINOS SEMEJANTES Super facil", youtubeId: "cH_NPAETuvA" },
+  ecParentesis: { title: "ECUACIONES LINEALES CON PARENTESIS Super facil", youtubeId: "n_b6D6hTJMs" },
+  ecAmbosLados: { title: "ECUACIONES DE PRIMER GRADO Super facil - Para principiantes", youtubeId: "IHblqjW8RY8" },
+  aplicacion1: { title: "PLANTEAMIENTO Y RESOLUCION DE ECUACIONES LINEALES Parte 1", youtubeId: "NAIjmDMNF10" },
+  planoCartesiano: { title: "PLANO CARTESIANO Super facil", youtubeId: "kzOzYY-T-50" },
+  graficar: { title: "GRAFICAR FUNCIONES LINEALES PARTE 1 Super facil", youtubeId: "edE5Y1kOgFw" },
+  sistemaGrafico: { title: "RESOLVER SISTEMAS DE ECUACIONES METODO GRAFICO", youtubeId: "Uynx_Dpuur4" },
+  sistemaSustitucion: { title: "RESOLVER ECUACIONES MÉTODO DE SUSTITUCIÓN", youtubeId: "mP0_LRPOudg" },
+  sistemaSumaResta: { title: "SISTEMAS DE ECUACIONES MÉTODO DE REDUCCIÓN O SUMA Y RESTA", youtubeId: "UMNcW4hjQK8" },
+  aplicacionSistema: { title: "PLANTEAR Y RESOLVER SISTEMAS DE ECUACIONES 2X2", youtubeId: "feBxABepi-o" }
 };
 // Qué video corresponde a cada lección de la ruta (los retos y el examen no llevan video)
-const LESSON_VIDEO_KEY = { piezas: 'partes', familias: 'semejantes', suma: 'suma', resta: 'resta', division: 'division', figuras: 'figuras', signos: 'exponentes', multMon: 'multMon', distributiva: 'distributiva', multPol: 'multPol', notables: 'productosNotables', factorComun: 'factorComun', difCuadrados: 'diferenciaCuadrados', trinomios: 'trinomios', cubos: 'cubos' };
+const LESSON_VIDEO_KEY = { piezas: 'partes', familias: 'semejantes', suma: 'suma', resta: 'resta', division: 'division', figuras: 'figuras', signos: 'exponentes', multMon: 'multMon', distributiva: 'distributiva', multPol: 'multPol', notables: 'productosNotables', factorComun: 'factorComun', difCuadrados: 'diferenciaCuadrados', trinomios: 'trinomios', cubos: 'cubos',
+  // --- Etapa 3 --- (ec_fracciones y ec_errores no llevan video, por diseño)
+  ec_concepto: 'conceptoEc', ec_basica: 'ecBasica', ec_parentesis: 'ecParentesis', ec_ambos: 'ecAmbosLados', ec_aplicacion: 'aplicacion1',
+  plano: 'planoCartesiano', graficar: 'graficar', sist_grafico: 'sistemaGrafico', sist_sustitucion: 'sistemaSustitucion', sist_suma_resta: 'sistemaSumaResta', sist_aplicacion: 'aplicacionSistema' };
 
 // ---------- Habilidades ----------
 // name: nombre visible · err: etiqueta de error frecuente · video: clave de VIDEO_SUPPORT
@@ -1768,12 +2289,29 @@ const SKILLS = {
   cubos: { name: 'Suma y diferencia de cubos', video: null },
   metodoFact: { name: 'Elegir el método de factorización', video: null },
   comprende: { name: 'Entender el porqué', video: null },
+  conceptoEc: { name: 'Conceptos de una ecuación', video: null },
+  ecBasica: { name: 'Ecuaciones lineales básicas', video: null },
+  terminosEc: { name: 'Reducir y resolver', video: null },
+  ecParentesis: { name: 'Ecuaciones con paréntesis', video: null },
+  ecAmbosLados: { name: 'Variable en ambos lados', video: null },
+  ecFracciones: { name: 'Ecuaciones con fracciones', video: null },
+  encuentraError: { name: 'Encuentra el error', video: null },
+  aplicacion1: { name: 'Problemas con una variable', video: null },
+  planoCartesiano: { name: 'Plano cartesiano', video: null },
+  graficar: { name: 'Graficar una recta', video: null },
+  sistemaGrafico: { name: 'Sistemas: método gráfico', video: null },
+  sistemaSustitucion: { name: 'Sistemas: sustitución', video: null },
+  sistemaSumaResta: { name: 'Sistemas: suma y resta', video: null },
+  aplicacionSistema: { name: 'Problemas con sistemas', video: null },
 };
 
 const ERR_TAGS = {
   'signos': 'Signos', 'exponentes': 'Exponentes', 'semejantes': 'Términos semejantes', 'distributiva': 'Propiedad distributiva',
   'paréntesis': 'Paréntesis', 'notable': 'Productos notables', 'factor común': 'Factor común', 'tipo de factorización': 'Tipo de factorización',
   'simplificar': 'Simplificar', 'división': 'División', 'otro': 'Otros',
+  'operación inversa': 'Operación inversa', 'despeje': 'Despejar la variable', 'fracciones': 'Ecuaciones con fracciones',
+  'plano cartesiano': 'Plano cartesiano', 'gráficas lineales': 'Gráficas lineales', 'sistemas gráficos': 'Sistemas gráficos',
+  'sustitución': 'Sustitución', 'eliminación': 'Eliminación (suma y resta)', 'planteamiento de sistemas': 'Planteamiento de sistemas',
 };
 // A qué generadores recurrir para repasar cada etiqueta de error
 const ERR_TO_GENS = {
@@ -1788,6 +2326,15 @@ const ERR_TO_GENS = {
   'simplificar': [['suma', 2], ['multPol', 2]],
   'división': [['divPolMon', 2], ['divPol', 2], ['divMon', 2]],
   'otro': [['semejantes', 2], ['distributiva', 2], ['factorComun', 2]],
+  'operación inversa': [['ecBasica', 2], ['terminosEc', 2]],
+  'despeje': [['ecAmbosLados', 2], ['ecBasica', 2], ['sistemaSustitucion', 1]],
+  'fracciones': [['ecFracciones', 2], ['ecFracciones', 1]],
+  'plano cartesiano': [['planoCartesiano', 1], ['planoCartesiano', 2]],
+  'gráficas lineales': [['graficar', 1], ['graficar', 2]],
+  'sistemas gráficos': [['sistemaGrafico', 1], ['sistemaGrafico', 2]],
+  'sustitución': [['sistemaSustitucion', 1], ['sistemaSustitucion', 2]],
+  'eliminación': [['sistemaSumaResta', 1], ['sistemaSumaResta', 2]],
+  'planteamiento de sistemas': [['aplicacionSistema', 1]],
 };
 
 // ---------- Helpers de pasos ----------
@@ -1915,25 +2462,122 @@ const LESSONS = [
       G('PRACTICA', 'metodoFact', 1), G('PRACTICA', 'cubos', 1), G('PRACTICA', 'cubos', 2), G('APLICA', 'metodoFact', 2), G('MINI RETO', 'cubos', 2), G('MINI RETO', 'cubos', 3), G('MINI RETO', 'metodoFact', 3),
     ] },
   { id: 'reto2', stage: 2, icon: '🏆', title: 'Reto Etapa 2', min: 10, skills: [], reto: 2, steps: [] },
+
+  // ===== ETAPA 3 =====
+  { id: 'ec_concepto', stage: 3, icon: '🔍', title: 'Conceptos de ecuación', min: 5, skills: ['conceptoEc'],
+    steps: [
+      I('DESCUBRE', 'Una ecuación tiene partes', 'Una <b>ecuación</b> dice que dos expresiones valen lo mismo. Todo lo que está antes del = es el <b>primer miembro</b>; lo que está después, el <b>segundo miembro</b>.', '<span class="m">3x + 5 = 20</span>'),
+      C('PRUEBA', 'En <span class="m">3x + 5 = 20</span>, ¿cuál es el <b>coeficiente</b> de x?', '<span class="m">3x + 5 = 20</span>', [o('3', 1), o('5', 0, 'Ese es el término independiente: el número que va solo.'), o('20', 0, 'Ese es el segundo miembro completo.')], 'El coeficiente es el número que multiplica a la variable: 3.'),
+      I('AJÁ', '💡 El vocabulario', 'La <b>variable</b> (o incógnita) es la letra desconocida. El <b>coeficiente</b> la multiplica. El <b>término independiente</b> es el número solo. El <b>grado</b> de una ecuación lineal siempre es 1: la variable no tiene exponente mayor a 1.<br>Una ecuación puede ser <b>condicional</b> (una sola solución), <b>identidad</b> (infinitas soluciones) o <b>sin solución</b>.'),
+      G('PRACTICA', 'conceptoEc', 1), G('PRACTICA', 'conceptoEc', 1), G('PRACTICA', 'conceptoEc', 2),
+      G('APLICA', 'conceptoEc', 3), G('MINI RETO', 'conceptoEc', 2), G('MINI RETO', 'conceptoEc', 3),
+    ] },
+  { id: 'ec_basica', stage: 3, icon: '⚖️', title: 'Ecuaciones básicas', min: 6, skills: ['ecBasica', 'terminosEc'],
+    steps: [
+      I('DESCUBRE', 'La balanza siempre debe estar en equilibrio', 'Una ecuación es como una balanza: si le haces algo a un lado (sumar, restar, multiplicar, dividir), debes hacerle lo mismo al otro lado para que siga en equilibrio.', '<span class="m">x + 5 = 12</span>'),
+      C('PRUEBA', 'Para despejar x en <span class="m">x + 5 = 12</span>, ¿qué le haces a los dos lados?', '<span class="m">x + 5 = 12</span>', [o('Restar 5', 1), o('Sumar 5', 0, 'Eso alejaría más a x de quedar sola.'), o('Multiplicar por 5', 0, 'La operación inversa de sumar es restar, no multiplicar.')], 'Restas 5 en ambos lados: <span class="m">x = 12 − 5 = 7</span>. Usaste la operación inversa a la suma.'),
+      I('AJÁ', '💡 Principio de equivalencia', 'Cada operación tiene su inversa: suma ↔ resta, multiplicación ↔ división. Si hay varios términos del mismo lado, primero <b>reduce los términos semejantes</b> y después despeja.', '<span class="m">2x + 8 − 5x = 20 → −3x + 8 = 20</span>'),
+      G('PRACTICA', 'ecBasica', 1), G('PRACTICA', 'ecBasica', 2), G('PRACTICA', 'terminosEc', 1),
+      G('APLICA', 'terminosEc', 2), G('MINI RETO', 'ecBasica', 3), G('MINI RETO', 'terminosEc', 2), G('MINI RETO', 'terminosEc', 3),
+    ] },
+  { id: 'ec_parentesis', stage: 3, icon: '🧮', title: 'Ecuaciones con paréntesis', min: 6, skills: ['ecParentesis'],
+    steps: [
+      C('DESCUBRE', 'Para resolver <span class="m">3(x + 2) = 18</span>, ¿qué haces primero?', '<span class="m">3(x + 2) = 18</span>', [o('Aplicar la propiedad distributiva', 1), o('Restar 2 de los dos lados', 0, 'El 2 está dentro del paréntesis, multiplicado por 3: primero hay que repartir esa multiplicación.'), o('Dividir 18 entre 2', 0, 'Todavía no puedes tocar el 18 sin antes quitar el paréntesis.')], 'Primero repartes el 3: <span class="m">3x + 6 = 18</span>. Después despejas como siempre.'),
+      I('AJÁ', '💡 Distribuye y despeja', 'El número de afuera multiplica a <b>todo</b> lo de adentro del paréntesis. Después de distribuir, reduces términos semejantes y despejas con el principio de equivalencia.', '<span class="m">3(x + 2) = 18 → 3x + 6 = 18 → 3x = 12 → x = 4</span>'),
+      G('PRACTICA', 'ecParentesis', 1), G('PRACTICA', 'ecParentesis', 2), G('APLICA', 'ecParentesis', 2),
+      G('MINI RETO', 'ecParentesis', 2), G('MINI RETO', 'ecParentesis', 3), G('MINI RETO', 'ecParentesis', 3),
+    ] },
+  { id: 'ec_ambos', stage: 3, icon: '🔀', title: 'Variable en ambos lados', min: 6, skills: ['ecAmbosLados'],
+    steps: [
+      C('DESCUBRE', 'En <span class="m">10 + 3x = 9x − 20</span>, ¿qué conviene hacer primero?', '<span class="m">10 + 3x = 9x − 20</span>', [o('Juntar los términos con x en un solo lado', 1), o('Sumar 20 y 10 directamente', 0, 'Están en lados distintos y uno tiene x pegada: no se pueden juntar todavía.'), o('Dividir todo entre 3', 0, 'Antes de dividir necesitas dejar la variable de un solo lado.')], 'Restas 3x de ambos lados: <span class="m">10 = 6x − 20</span>. Ahora la variable está en un solo lado.'),
+      I('AJÁ', '💡 Un solo lado para la variable', 'Cuando la variable aparece en los dos miembros, pásala toda a un mismo lado (sumando o restando en ambos lados) y los números al otro. Después despeja normalmente.'),
+      G('PRACTICA', 'ecAmbosLados', 1), G('PRACTICA', 'ecAmbosLados', 2), G('APLICA', 'ecAmbosLados', 2),
+      G('MINI RETO', 'ecAmbosLados', 2), G('MINI RETO', 'ecAmbosLados', 3), G('MINI RETO', 'ecAmbosLados', 3),
+    ] },
+  { id: 'ec_fracciones', stage: 3, icon: '🍰', title: 'Ecuaciones con fracciones', min: 6, skills: ['ecFracciones'],
+    steps: [
+      I('DESCUBRE', 'Las fracciones también se despejan', 'Si la variable está dividida entre un número, la operación inversa a la división es la <b>multiplicación</b>.', '<span class="m">⟦x|3⟧ = 9</span>'),
+      C('PRUEBA', 'Para resolver <span class="m">⟦x|3⟧ = 9</span>, ¿qué haces?', '<span class="m">⟦x|3⟧ = 9</span>', [o('Multiplicar los dos lados por 3', 1), o('Dividir los dos lados entre 3', 0, 'Eso alejaría más a x de quedar sola: la fracción ya está dividida entre 3.'), o('Restar 3 de los dos lados', 0, 'El 3 no se está sumando ni restando: está dividiendo.')], 'Multiplicas por 3 en ambos lados: <span class="m">x = 27</span>.'),
+      I('AJÁ', '💡 Primero aísla la fracción', 'Si hay números sumando o restando junto a la fracción, muévelos primero al otro lado. Ya que la fracción quede sola, multiplica ambos lados por el denominador.'),
+      G('PRACTICA', 'ecFracciones', 1), G('PRACTICA', 'ecFracciones', 2), G('APLICA', 'ecFracciones', 3),
+      G('MINI RETO', 'ecFracciones', 2), G('MINI RETO', 'ecFracciones', 3),
+    ] },
+  { id: 'ec_errores', stage: 3, icon: '🕵️', title: 'Encuentra el error', min: 5, skills: ['encuentraError'],
+    steps: [
+      I('DESCUBRE', 'Aprender de los errores comunes', 'Revisar procedimientos incorrectos te ayuda a no repetir los mismos errores: de signo, al distribuir, al reducir términos semejantes, al usar la operación inversa, al despejar o con las fracciones.'),
+      G('PRACTICA', 'encuentraError', 1), G('PRACTICA', 'encuentraError', 1), G('PRACTICA', 'encuentraError', 1),
+      G('APLICA', 'encuentraError', 1), G('MINI RETO', 'encuentraError', 1), G('MINI RETO', 'encuentraError', 1),
+    ] },
+  { id: 'ec_aplicacion', stage: 3, icon: '🧩', title: 'Problemas con una variable', min: 7, skills: ['aplicacion1'],
+    steps: [
+      I('DESCUBRE', 'De las palabras a la ecuación', 'Para resolver un problema: 1) Lee y comprende qué te preguntan y qué información tienes. 2) Define una variable. 3) Plantea la ecuación. 4) Resuélvela. 5) Interpreta el resultado en el contexto del problema.'),
+      G('PRACTICA', 'aplicacion1', 1), G('PRACTICA', 'aplicacion1', 1), G('PRACTICA', 'aplicacion1', 1),
+      G('APLICA', 'aplicacion1', 1), G('MINI RETO', 'aplicacion1', 1), G('MINI RETO', 'aplicacion1', 1),
+    ] },
+  { id: 'plano', stage: 3, icon: '🗺️', title: 'Plano cartesiano', min: 5, skills: ['planoCartesiano'],
+    steps: [
+      I('DESCUBRE', 'Cuatro cuadrantes', 'El plano cartesiano se divide en 4 cuadrantes, numerados en sentido contrario a las manecillas del reloj desde la esquina superior derecha: I (+,+), II (−,+), III (−,−), IV (+,−).'),
+      G('PRACTICA', 'planoCartesiano', 1), G('PRACTICA', 'planoCartesiano', 1), G('PRACTICA', 'planoCartesiano', 2),
+      G('APLICA', 'planoCartesiano', 2), G('MINI RETO', 'planoCartesiano', 2), G('MINI RETO', 'planoCartesiano', 3),
+    ] },
+  { id: 'graficar', stage: 3, icon: '📈', title: 'Graficar una recta', min: 6, skills: ['graficar'],
+    steps: [
+      I('DESCUBRE', 'Una tabla de valores', 'Para graficar una ecuación lineal, primero despeja y. Después da valores a x y calcula el valor de y correspondiente: esos pares (x, y) son los puntos de la recta.', '<span class="m">y = 5 − x</span>'),
+      G('PRACTICA', 'graficar', 1), G('PRACTICA', 'graficar', 1), G('PRACTICA', 'graficar', 2),
+      G('APLICA', 'graficar', 3), G('MINI RETO', 'graficar', 2), G('MINI RETO', 'graficar', 3),
+    ] },
+  { id: 'sist_grafico', stage: 3, icon: '📊', title: 'Sistemas: método gráfico', min: 6, skills: ['sistemaGrafico'],
+    steps: [
+      I('DESCUBRE', 'El punto donde se cruzan', 'El método gráfico consiste en dibujar las dos rectas del sistema: el punto donde se cruzan es la solución. Si son paralelas, no hay solución; si son la misma recta, hay infinitas soluciones.'),
+      G('PRACTICA', 'sistemaGrafico', 1), G('PRACTICA', 'sistemaGrafico', 2), G('APLICA', 'sistemaGrafico', 2),
+      G('MINI RETO', 'sistemaGrafico', 2), G('MINI RETO', 'sistemaGrafico', 3),
+    ] },
+  { id: 'sist_sustitucion', stage: 3, icon: '🔁', title: 'Sistemas: sustitución', min: 7, skills: ['sistemaSustitucion'],
+    steps: [
+      I('DESCUBRE', 'Despeja y sustituye', 'El método de sustitución consiste en despejar una variable en una ecuación y sustituir esa expresión en la otra ecuación, dejando una sola incógnita.'),
+      G('PRACTICA', 'sistemaSustitucion', 1), G('PRACTICA', 'sistemaSustitucion', 2), G('APLICA', 'sistemaSustitucion', 2),
+      G('MINI RETO', 'sistemaSustitucion', 2), G('MINI RETO', 'sistemaSustitucion', 3),
+    ] },
+  { id: 'sist_suma_resta', stage: 3, icon: '➕➖', title: 'Sistemas: suma y resta', min: 7, skills: ['sistemaSumaResta'],
+    steps: [
+      I('DESCUBRE', 'Elimina una variable', 'El método de suma y resta (eliminación) consiste en multiplicar una o ambas ecuaciones para que una variable tenga coeficientes opuestos, y al sumarlas esa variable se cancela.'),
+      G('PRACTICA', 'sistemaSumaResta', 1), G('PRACTICA', 'sistemaSumaResta', 2), G('APLICA', 'sistemaSumaResta', 2),
+      G('MINI RETO', 'sistemaSumaResta', 2), G('MINI RETO', 'sistemaSumaResta', 3),
+    ] },
+  { id: 'sist_aplicacion', stage: 3, icon: '🧠', title: 'Problemas con sistemas', min: 7, skills: ['aplicacionSistema'],
+    steps: [
+      I('DESCUBRE', 'Dos incógnitas, dos ecuaciones', 'Cuando un problema tiene dos cantidades desconocidas, define dos variables y plantea dos ecuaciones con la información del problema. Resuelve el sistema con el método que prefieras.'),
+      G('PRACTICA', 'aplicacionSistema', 1), G('PRACTICA', 'aplicacionSistema', 1), G('APLICA', 'aplicacionSistema', 1),
+      G('MINI RETO', 'aplicacionSistema', 1), G('MINI RETO', 'aplicacionSistema', 1),
+    ] },
+  { id: 'reto3', stage: 3, icon: '🏆', title: 'Reto Etapa 3', min: 10, skills: [], reto: 3, steps: [] },
 ];
 
 // Retos de etapa (mezcla; se generan con semilla)
 const RETO_BLUEPRINT = {
   1: [['partes', 2], ['clasif', 2], ['semejantes', 2], ['suma', 2], ['resta', 3], ['agrupacion', 2], ['divMon', 2], ['divPolMon', 2], ['perimetro', 2], ['divPol', 2]],
   2: [['exponentes', 2], ['multMon', 2], ['distributiva', 2], ['multPol', 2], ['cuadrado', 2], ['conjugados', 2], ['factorComun', 2], ['difCuadrados', 2], ['trinomio1', 2], ['tcp', 2], ['trinomio2', 2], ['cubos', 2]],
+  3: [['conceptoEc', 2], ['ecBasica', 2], ['terminosEc', 2], ['ecParentesis', 2], ['ecAmbosLados', 2], ['ecFracciones', 2], ['encuentraError', 1], ['aplicacion1', 1], ['planoCartesiano', 2], ['graficar', 2], ['sistemaGrafico', 2], ['sistemaSustitucion', 2], ['sistemaSumaResta', 2], ['aplicacionSistema', 1]],
 };
 
-// Blueprint del simulacro / examen final: 8 de Etapa 1 + 12 de Etapa 2 (25% fácil, 50% medio, 25% difícil)
-// Cada ranura: lista de alternativas [gen, nivel, opts]; la semilla elige una.
-const EXAM_SLOTS = [
+// Blueprint de los exámenes finales: 10 preguntas por etapa.
+// Cada ranura: lista de alternativas [gen, nivel, opts]. El campo `diff` es solo orientativo/visual
+// (nunca lo lee ninguna lógica de app.js ni de gen.js para decidir dificultad real).
+// Etapas 1 y 2: cada ranura ofrece 1+ alternativas equivalentes; la semilla del intento elige entre
+// ellas, dando variedad sin cambiar el nivel de dificultad relativo de la ranura.
+const EXAM_SLOTS_1 = [
   { st: 1, diff: 1, alts: [['clasif', 1], ['partes', 1]] },
   { st: 1, diff: 1, alts: [['semejantes', 1], ['semejantes', 2]] },
+  { st: 1, diff: 1, alts: [['partes', 2], ['lenguaje', 1]] },
   { st: 1, diff: 2, alts: [['suma', 2]] },
   { st: 1, diff: 2, alts: [['resta', 2]] },
   { st: 1, diff: 2, alts: [['agrupacion', 2], ['resta', 2]] },
   { st: 1, diff: 2, alts: [['divMon', 2], ['divPolMon', 2]] },
+  { st: 1, diff: 2, alts: [['perimetro', 2], ['semejantes', 3]] },
   { st: 1, diff: 3, alts: [['perimetro', 3], ['perimetro', 2]] },
   { st: 1, diff: 3, alts: [['divPol', 3], ['divPol', 2, { geo: 1 }]] },
+];
+const EXAM_SLOTS_2 = [
   { st: 2, diff: 1, alts: [['exponentes', 1], ['signos', 1]] },
   { st: 2, diff: 1, alts: [['distributiva', 1], ['multMon', 1]] },
   { st: 2, diff: 1, alts: [['metodoFact', 1], ['notables', 1]] },
@@ -1943,10 +2587,28 @@ const EXAM_SLOTS = [
   { st: 2, diff: 2, alts: [['factorComun', 2]] },
   { st: 2, diff: 2, alts: [['difCuadrados', 2]] },
   { st: 2, diff: 2, alts: [['trinomio1', 2], ['tcp', 2]] },
-  { st: 2, diff: 3, alts: [['trinomio2', 3], ['trinomio2', 2]] },
-  { st: 2, diff: 3, alts: [['difCuadrados', 3]] },
-  { st: 2, diff: 3, alts: [['multPol', 3, { geo: 1 }], ['cuadrado', 3, { geo: 1 }], ['cubos', 3]] },
+  { st: 2, diff: 3, alts: [['trinomio2', 3], ['trinomio2', 2], ['multPol', 3, { geo: 1 }], ['cubos', 3]] },
 ];
+// Etapa 3: 10 ranuras FIJAS que garantizan cobertura de las 10 habilidades clave de la etapa, ordenadas
+// de básico (conceptos de ecuación) a avanzado (sistemas de ecuaciones), en vez de dejar qué habilidades
+// aparecen sujeto al azar. Las ranuras 7, 8 y 9 (`rotate: true`) alternan de forma determinista según el
+// número de intento (S.draft.attempt, ver examProblemSpec en app.js) entre sus alternativas, así ninguna
+// queda nunca fuera del examen ni sujeta puramente a la suerte de la semilla.
+const EXAM_SLOTS_3 = [
+  { st: 3, diff: 1, alts: [['conceptoEc', 1], ['conceptoEc', 2]] },
+  { st: 3, diff: 1, alts: [['ecBasica', 1], ['ecBasica', 2]] },
+  { st: 3, diff: 2, alts: [['terminosEc', 2]] },
+  { st: 3, diff: 2, alts: [['ecParentesis', 2]] },
+  { st: 3, diff: 2, alts: [['ecAmbosLados', 2]] },
+  { st: 3, diff: 2, alts: [['ecFracciones', 2]] },
+  { st: 3, diff: 3, rotate: true, alts: [['encuentraError', 1], ['aplicacion1', 1]] },
+  { st: 3, diff: 3, rotate: true, alts: [['planoCartesiano', 2], ['graficar', 3]] },
+  { st: 3, diff: 3, rotate: true, alts: [['sistemaSustitucion', 2], ['sistemaSumaResta', 2], ['sistemaGrafico', 2]] },
+  { st: 3, diff: 3, alts: [['aplicacionSistema', 1]] },
+];
+const EXAM_SLOTS_BY_STAGE = { 1: EXAM_SLOTS_1, 2: EXAM_SLOTS_2, 3: EXAM_SLOTS_3 };
+// Alias retrocompatible: el examen combinado de Etapas 1 y 2 que existía antes de separar por etapa.
+const EXAM_SLOTS = EXAM_SLOTS_1.concat(EXAM_SLOTS_2);
 
 // Regla que se muestra al acertar (el "porqué"), por generador
 const RULES = {
@@ -1978,9 +2640,23 @@ const RULES = {
   trinomio2: 'En ax² + bx + c se prueban factores de a y de c hasta que el término del medio coincida. Se comprueba multiplicando.',
   cubos: 'a³ + b³ = (a + b)(a² − ab + b²) y a³ − b³ = (a − b)(a² + ab + b²).',
   metodoFact: 'Primero se busca factor común; después se decide por el número de términos: dos (diferencia de cuadrados o de cubos) o tres (trinomio).',
+  conceptoEc: 'En una ecuación, la variable es la letra desconocida, el coeficiente la multiplica, el término independiente es el número solo, y los miembros son lo que hay antes y después del signo =.',
+  ecBasica: 'Aplica el principio de equivalencia: lo que le hagas a un lado de la ecuación, hazlo también al otro, usando la operación inversa para despejar la variable.',
+  terminosEc: 'Antes de despejar, junta los términos semejantes de cada lado sumando sus coeficientes con su signo.',
+  ecParentesis: 'El número de afuera del paréntesis multiplica a todos los términos de adentro (propiedad distributiva); después despeja como siempre.',
+  ecAmbosLados: 'Si la variable está en los dos lados, pásala toda a un mismo lado (sumando o restando en ambos miembros) y los números al otro.',
+  ecFracciones: 'Aísla la fracción y después multiplica ambos lados por el denominador para eliminarla.',
+  encuentraError: 'Los errores comunes al resolver ecuaciones son: de signo, al distribuir, al reducir términos semejantes, al usar la operación inversa, al despejar o con las fracciones.',
+  aplicacion1: 'Para resolver un problema: lee y comprende, define una variable, plantea la ecuación, resuélvela e interpreta el resultado en el contexto.',
+  planoCartesiano: 'El plano cartesiano tiene 4 cuadrantes: I (+,+), II (−,+), III (−,−), IV (+,−), numerados en sentido contrario a las manecillas del reloj.',
+  graficar: 'Para graficar una recta, despeja y, da valores a x y calcula el valor de y correspondiente; esos pares (x, y) son puntos de la recta.',
+  sistemaGrafico: 'El punto donde se cruzan las dos rectas es la solución del sistema. Si son paralelas no hay solución; si son la misma recta, hay infinitas soluciones.',
+  sistemaSustitucion: 'Despeja una variable en una ecuación y sustituye esa expresión en la otra para resolver con una sola incógnita.',
+  sistemaSumaResta: 'Multiplica una o ambas ecuaciones para que una variable tenga coeficientes opuestos; al sumarlas, esa variable se cancela.',
+  aplicacionSistema: 'Define dos variables, plantea dos ecuaciones con la información del problema y resuelve el sistema.',
 };
 
-if (typeof module !== 'undefined') module.exports = { LESSON_VIDEOS, LESSON_VIDEO_KEY, RULES, SKILLS, ERR_TAGS, ERR_TO_GENS, LESSONS, RETO_BLUEPRINT, EXAM_SLOTS };
+if (typeof module !== 'undefined') module.exports = { LESSON_VIDEOS, LESSON_VIDEO_KEY, RULES, SKILLS, ERR_TAGS, ERR_TO_GENS, LESSONS, RETO_BLUEPRINT, EXAM_SLOTS, EXAM_SLOTS_1, EXAM_SLOTS_2, EXAM_SLOTS_3, EXAM_SLOTS_BY_STAGE };
 
 };
 __M["app"]=function(module,exports){var require=__req;
@@ -1990,12 +2666,14 @@ __M["app"]=function(module,exports){var require=__req;
 'use strict';
 const Core = require('./core.js'), Chk = require('./check.js'), Gen = require('./gen.js'), Ct = require('./content.js');
 const { M, esc, RNG } = Core;
-const { RULES, LESSONS, SKILLS, ERR_TAGS, ERR_TO_GENS, LESSON_VIDEOS, LESSON_VIDEO_KEY, RETO_BLUEPRINT, EXAM_SLOTS } = Ct;
+const { RULES, LESSONS, SKILLS, ERR_TAGS, ERR_TO_GENS, LESSON_VIDEOS, LESSON_VIDEO_KEY, RETO_BLUEPRINT, EXAM_SLOTS_BY_STAGE } = Ct;
+const STAGE_NAMES = { 1: 'Entiende y transforma polinomios', 2: 'Construye y desarma polinomios', 3: 'Ecuaciones lineales en una y dos variables' };
+const STAGES = [1, 2, 3];
 
 const KEY = 'despeja.v1';
 const $ = (s, r) => (r || document).querySelector(s);
 const rnd = () => Math.floor(Math.random() * 1e9) + 1;
-const fx = (h) => String(h || '').replace(/⟦([^⟦⟧|]*)\|([^⟦⟧]*)⟧/g, '<span class="fr"><span class="n">$1</span><span class="d">$2</span></span>');
+const fx = (h) => String(h || '').replace(/⟦([^⟦⟧|]*)\|([^⟦⟧]*)⟧/g, '<span class="fr"><span class="n">$1</span><span class="d">$2</span></span>').replace(/\^\(([^()]*)\)/g, '<sup>$1</sup>').replace(/\^([−-]?[A-Za-z0-9]+)/g, '<sup>$1</sup>');
 
 // ---------- Estado ----------
 function fresh() { return { v: 1, name: '', exam: '2026-09-21', placed: false, done: {}, skills: {}, errors: {}, streak: { n: 0, last: '' }, xp: 0, retos: {}, exams: [], draft: null, videos: {}, attempts: {} }; }
@@ -2203,8 +2881,48 @@ function mountEx(root, spec, cfg) {
   function init(seed, similar) {
     p = Gen.makeProblem(spec.gen, spec.level, seed, spec.opts || {});
     window.__cur = p;
-    st = { wrong: 0, hints: 0, vid: false, sol: false, similar: !!similar, done: false, sel: null, sels: [], bad: new Set(), t0: Date.now(), res: null, ended: false };
+    st = { wrong: 0, hints: 0, vid: false, sol: false, similar: !!similar, done: false, sel: null, sels: [], bad: new Set(), t0: Date.now(), res: null, ended: false, pt: null, pts: [] };
   }
+  // Convierte un clic sobre el <svg class="plane"> a coordenadas de datos usando la misma geometría que Gen.svgPlane.
+  function svgToData(svgEl, evt, range) {
+    const g = Gen.planeGeom(range);
+    let loc;
+    try {
+      const pt = svgEl.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+      const ctm = svgEl.getScreenCTM();
+      loc = ctm ? pt.matrixTransform(ctm.inverse()) : null;
+    } catch (e) { loc = null; }
+    if (!loc) {
+      const rect = svgEl.getBoundingClientRect();
+      loc = { x: (evt.clientX - rect.left) / rect.width * g.W, y: (evt.clientY - rect.top) / rect.height * g.H };
+    }
+    const dataX = g.lo + (loc.x - g.pad) / (g.W - 2 * g.pad) * g.span;
+    const dataY = g.lo + (g.H - g.pad - loc.y) / (g.H - 2 * g.pad) * g.span;
+    return { x: Math.round(dataX), y: Math.round(dataY) };
+  }
+  function redrawFigure() {
+    const fw = root.querySelector('.figwrap'); if (!fw) return;
+    const base = p.planeOpts || { range: p.range || [-6, 6] };
+    let pts = [];
+    if (p.kind === 'point') pts = st.pt ? [{ x: st.pt.x, y: st.pt.y, color: 'c2' }] : [];
+    else if (p.kind === 'point2') pts = st.pts.map((q) => ({ x: q.x, y: q.y, color: 'c2' }));
+    else return;
+    fw.innerHTML = Gen.svgPlane(Object.assign({}, base, { points: pts }));
+  }
+  function updatePtStatus() {
+    const e = root.querySelector('#ptstatus'); if (!e) return;
+    if (p.kind === 'point') e.textContent = st.pt ? 'Colocaste el punto (' + st.pt.x + ', ' + st.pt.y + ').' : 'Toca el plano para colocar el punto.';
+    else if (p.kind === 'point2') e.textContent = st.pts.length ? 'Puntos colocados: ' + st.pts.map((q) => '(' + q.x + ', ' + q.y + ')').join(' , ') : 'Toca dos puntos distintos sobre la recta.';
+  }
+  // Gancho de prueba (Playwright): simula colocar un punto sin depender de coordenadas reales de mouse.
+  window.__testClickPoint = function (x, y) {
+    if (!p || st.done || (st.sol && mode !== 'exam')) return false;
+    if (p.kind === 'point') st.pt = { x, y };
+    else if (p.kind === 'point2') { st.pts.push({ x, y }); if (st.pts.length > 2) st.pts.shift(); }
+    else return false;
+    redrawFigure(); updatePtStatus();
+    return true;
+  };
   function letters() {
     const txt = (String(p.expr || '') + String(p.figure || '') + String(p.instr || '')).replace(/<[^>]+>/g, ' ');
     const found = new Set(); (String(p.expr || '') + String(p.figure || '')).replace(/<[^>]+>/g, ' ').replace(/[a-z]/g, (c) => { found.add(c); return c; });
@@ -2218,6 +2936,9 @@ function mountEx(root, spec, cfg) {
       case 'input': return '<input id="a1" ' + at + ' placeholder="Escribe tu respuesta">' + keys();
       case 'frac': return '<div class="fracin"><input id="a1" ' + at + ' placeholder="numerador"><hr><input id="a2" ' + at + ' placeholder="denominador"></div>' + keys();
       case 'qr': return '<div class="lbl">COCIENTE</div><input id="a1" ' + at + ' placeholder="cociente"><div class="lbl">RESIDUO (0 si no sobra nada)</div><input id="a2" ' + at + ' placeholder="residuo">' + keys();
+      case 'sys': return '<div class="lbl">x =</div><input id="a1" ' + at + ' placeholder="valor de x"><div class="lbl">y =</div><input id="a2" ' + at + ' placeholder="valor de y">' + keys();
+      case 'point': return '<div id="ptstatus" class="mute" style="margin-top:8px">Toca el plano para colocar el punto.</div>';
+      case 'point2': return '<div id="ptstatus" class="mute" style="margin-top:8px">Toca dos puntos distintos sobre la recta.</div>';
       default: return '<div id="opts">' + p.options.map((o, i) => '<button class="opt" data-i="' + i + '">' + fx(o.h) + '</button>').join('') + '</div>';
     }
   }
@@ -2241,6 +2962,9 @@ function mountEx(root, spec, cfg) {
       case 'input': return g('#a1');
       case 'frac': return { n: g('#a1'), d: g('#a2') };
       case 'qr': return { q: g('#a1'), r: g('#a2') };
+      case 'sys': return { x: g('#a1'), y: g('#a2') };
+      case 'point': return st.pt;
+      case 'point2': return { p1: st.pts[0], p2: st.pts[1] };
       case 'choice': return st.sel;
       default: return st.sels.slice();
     }
@@ -2299,6 +3023,15 @@ function mountEx(root, spec, cfg) {
     acts();
   }
   root.addEventListener('click', (e) => {
+    const svgPt = e.target.closest('svg.plane');
+    if (svgPt && (p.kind === 'point' || p.kind === 'point2') && !st.done && !(st.sol && mode !== 'exam')) {
+      const range = (p.planeOpts && p.planeOpts.range) || p.range || [-6, 6];
+      const pos = svgToData(svgPt, e, range);
+      if (p.kind === 'point') st.pt = pos;
+      else { st.pts.push(pos); if (st.pts.length > 2) st.pts.shift(); }
+      redrawFigure(); updatePtStatus();
+      return;
+    }
     const k = e.target.closest('[data-k]'); if (k && lastInput && !lastInput.disabled) {
       const v = k.getAttribute('data-k'), el = lastInput, s = el.selectionStart == null ? el.value.length : el.selectionStart, en = el.selectionEnd == null ? s : el.selectionEnd;
       el.value = el.value.slice(0, s) + v + el.value.slice(en); el.focus(); const pos = s + v.length; try { el.setSelectionRange(pos, pos); } catch (x) { /* nada */ } preview(); return;
@@ -2347,22 +3080,25 @@ function nextLesson() { return LESSONS.find((l) => !S.done[l.id]); }
 function errTotal() { return Object.keys(S.errors).reduce((a, k) => a + S.errors[k], 0); }
 VIEWS.home = function (app) {
   const d = daysTo(S.exam), nl = nextLesson(), dr = S.draft;
-  const p1 = Math.round(stageProg(1) * 100), p2 = Math.round(stageProg(2) * 100);
+  const progs = STAGES.map((st) => Math.round(stageProg(st) * 100));
   let h = '<h1>Hola, ' + esc(S.name) + ' 👋</h1><div class="stats"><span class="stat">📅 ' + (d > 1 ? 'Examen en ' + d + ' días' : d === 1 ? 'Examen mañana' : d === 0 ? 'Examen hoy' : 'Examen pasado') + '</span><span class="stat">🔥 ' + S.streak.n + '</span><span class="stat">⭐ ' + S.xp + ' XP</span></div>';
-  h += '<div class="card"><div class="lbl">ETAPA 1 · ' + p1 + '%</div><div class="bar"><i style="width:' + p1 + '%"></i></div><div class="lbl" style="margin-top:12px">ETAPA 2 · ' + p2 + '%</div><div class="bar e2"><i style="width:' + p2 + '%"></i></div></div>';
-  if (dr) h += '<div class="card next"><span class="chip">EXAMEN EN CURSO</span><h2>📝 Pregunta ' + (dr.idx + 1) + ' de ' + EXAM_SLOTS.length + '</h2><button class="btn primary" data-act="examResume">CONTINUAR EXAMEN</button></div>';
+  h += '<div class="card">' + STAGES.map((st, i) => '<div class="lbl"' + (i ? ' style="margin-top:12px"' : '') + '>ETAPA ' + st + ' · ' + progs[i] + '%</div><div class="bar' + (st === 2 ? ' e2' : st === 3 ? ' e3' : '') + '"><i style="width:' + progs[i] + '%"></i></div>').join('') + '</div>';
+  if (dr) { const n = (EXAM_SLOTS_BY_STAGE[dr.stage] || EXAM_SLOTS_BY_STAGE[1]).length; h += '<div class="card next"><span class="chip">EXAMEN EN CURSO</span><h2>📝 Pregunta ' + (dr.idx + 1) + ' de ' + n + '</h2><button class="btn primary" data-act="examResume">CONTINUAR EXAMEN</button></div>'; }
   if (nl) h += '<div class="card next"><span class="chip">▶ RECOMENDADO AHORA</span><h2>' + nl.icon + ' ' + nl.title + ' — ' + nl.min + ' minutos</h2><button class="btn primary" data-act="lesson" data-id="' + nl.id + '">CONTINUAR</button></div>';
-  else h += '<div class="card next"><span class="chip">RUTA COMPLETA</span><h2>📝 Hora del examen final</h2><button class="btn primary" data-act="examIntro">HACER EL EXAMEN FINAL</button></div>';
-  h += '<div class="row"><button class="btn" data-act="errors">🔁 Repasar mis errores' + (errTotal() ? ' (' + errTotal() + ')' : '') + '</button>' + (nl && nl.reto ? '' : '') + '</div>';
+  else h += '<div class="card next"><span class="chip">RUTA COMPLETA</span><h2>📝 Hora del examen final</h2><button class="btn primary" data-act="examIntro" data-st="3">HACER EL EXAMEN FINAL</button></div>';
+  h += '<div class="row"><button class="btn" data-act="errors">🔁 Repasar mis errores' + (errTotal() ? ' (' + errTotal() + ')' : '') + '</button></div>';
   // mapa
-  [1, 2].forEach((st) => {
-    h += '<div class="stage">ETAPA ' + st + '<b>' + (st === 1 ? 'Entiende y transforma polinomios' : 'Construye y desarma polinomios') + '</b></div>';
+  STAGES.forEach((st) => {
+    h += '<div class="stage">ETAPA ' + st + '<b>' + STAGE_NAMES[st] + '</b></div>';
     LESSONS.filter((l) => l.stage === st).forEach((l) => {
       const dn = S.done[l.id], cur = nl && nl.id === l.id, stars = dn ? '⭐'.repeat(lessonStars(l)) : '';
       h += '<button class="node ' + (dn ? 'done' : cur ? 'cur' : '') + '" data-act="' + (l.reto ? 'reto' : 'lesson') + '" data-id="' + l.id + '"><span class="ic">' + l.icon + '</span><span><div class="t">' + l.title + '</div><div class="s">' + (dn ? '✓ Completado' + (dn.fast ? ' · ⚡ ya lo dominabas ' : ' ') + stars : cur ? '<b style="color:var(--pri-d)">▶ Recomendado ahora</b> · ' + l.min + ' min' : '○ Pendiente · ' + l.min + ' min') + (S.retos[l.reto] ? ' · mejor ' + S.retos[l.reto] + '%' : '') + '</div></span><span class="st">' + (dn ? '✓' : cur ? '▶' : '○') + '</span></button>';
     });
+    const stExams = S.exams.filter((x) => x.exStage === st), lastSt = stExams[stExams.length - 1];
+    const doneSt = LESSONS.filter((l) => l.stage === st).every((l) => S.done[l.id]);
+    const curSt = doneSt && !stExams.length;
+    h += '<button class="node ' + (stExams.length ? 'done' : curSt ? 'cur' : '') + '" data-act="examIntro" data-st="' + st + '"><span class="ic">📝</span><span><div class="t">' + (stExams.length ? 'Nuevo simulacro · Etapa ' + st : 'Examen final · Etapa ' + st) + '</div><div class="s">' + (curSt ? '<b style="color:var(--pri-d)">▶ Recomendado ahora</b> · ' : '') + '10 preguntas · sin pistas' + (lastSt ? ' · último ' + lastSt.pct + '%' : '') + '</div></span><span class="st">' + (stExams.length ? '✓' : curSt ? '▶' : '○') + '</span></button>';
   });
-  h += '<div class="stage">FINAL<b>Examen final · Etapas 1 y 2</b></div><button class="node ' + (!nl ? 'cur' : '') + '" data-act="examIntro"><span class="ic">📝</span><span><div class="t">' + (S.exams.length ? 'Nuevo simulacro' : 'Examen final · Etapas 1 y 2') + '</div><div class="s">' + (!nl ? '<b style="color:var(--pri-d)">▶ Recomendado ahora</b> · ' : '○ ') + '20 preguntas · sin pistas' + (S.exams.length ? ' · último ' + S.exams[S.exams.length - 1].pct + '%' : '') + '</div></span><span class="st">' + (S.exams.length ? '✓' : !nl ? '▶' : '○') + '</span></button>';
   h += (S.exams.length ? '<button class="btn small" data-act="examLast">Ver mi último resultado</button>' : '');
   h += '<div style="margin-top:30px" class="center">' + (V.confirm ? '<p class="mute">Se borrará todo tu progreso.</p><button class="btn small" data-act="reset2" style="background:var(--bad-l);color:var(--bad)">SÍ, BORRAR TODO</button><button class="btn ghost small" data-act="home">Cancelar</button>' : '<button class="btn ghost small" data-act="reset1">Reiniciar progreso</button>') + '</div>';
   app.innerHTML = h;
@@ -2458,22 +3194,33 @@ function startReview() {
 }
 
 // ---------- Simulacro / examen final ----------
-function examProblemSpec(seed, i) {
-  const slot = EXAM_SLOTS[i], r = RNG(seed * 31 + i * 7 + 1), a = r.pick(slot.alts);
+function examProblemSpec(seed, i, stage, attempt) {
+  const slots = EXAM_SLOTS_BY_STAGE[stage || 1], slot = slots[i], r = RNG(seed * 31 + i * 7 + 1);
+  let a;
+  if (slot.rotate && slot.alts && slot.alts.length) {
+    // Ranuras 7/8/9 de la Etapa 3: rotación determinista por número de intento, para no dejar
+    // nunca alguna alternativa fuera del azar (a diferencia de r.pick, que podría no elegirla nunca).
+    const att = (attempt && attempt > 0) ? attempt : 1;
+    a = slot.alts[(att - 1) % slot.alts.length];
+  } else {
+    a = r.pick(slot.alts);
+  }
   return { gen: a[0], level: a[1], opts: a[2] || {}, seed: seed * 1000 + i + 1, st: slot.st };
 }
 const fmtT = (ms) => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 function readiness(p) { return p >= 90 ? 'Muy buena preparación para el examen.' : p >= 80 ? 'Vas bien. Repasa los temas marcados antes del examen.' : p >= 70 ? 'Necesitas otra ronda de práctica.' : 'Conviene regresar a los niveles señalados antes de repetir el examen.'; }
 VIEWS.examIntro = function (app) {
-  const last = S.exams[S.exams.length - 1];
-  app.innerHTML = '<div class="top"><button class="x" data-act="home">✕</button></div><div class="hero"><div class="big" style="font-size:3rem">📝</div><h1>Examen final · Etapas 1 y 2</h1></div>'
-    + '<div class="card"><p><b>20 preguntas</b>: 8 de la Etapa 1 y 12 de la Etapa 2.</p><p>Sin pistas, sin videos y con <b>un solo intento</b>. No verás si acertaste hasta el final: así medimos lo que ya puedes hacer sola.</p><p class="mute">Hay un cronómetro, sin presión: sirve para conocer tu ritmo.</p></div>'
-    + (last ? '<p class="center mute">Tu último intento: ' + last.pct + '%</p>' : '') + '<button class="btn primary" data-act="examStart">' + (last ? 'NUEVO SIMULACRO (preguntas nuevas)' : 'EMPEZAR EL EXAMEN') + '</button>';
+  const st = V.st || 3, last = S.exams.filter((x) => x.exStage === st).slice(-1)[0];
+  const n = EXAM_SLOTS_BY_STAGE[st].length;
+  app.innerHTML = '<div class="top"><button class="x" data-act="home">✕</button></div><div class="hero"><div class="big" style="font-size:3rem">📝</div><h1>Examen final · Etapa ' + st + '</h1><p class="mute">' + esc(STAGE_NAMES[st]) + '</p></div>'
+    + '<div class="card"><p><b>' + n + ' preguntas</b> sobre los temas de esta etapa.</p><p>Sin pistas, sin videos y con <b>un solo intento</b>. No verás si acertaste hasta el final: así medimos lo que ya puedes hacer sola.</p><p class="mute">Hay un cronómetro, sin presión: sirve para conocer tu ritmo.</p></div>'
+    + (last ? '<p class="center mute">Tu último intento: ' + last.pct + '%</p>' : '') + '<button class="btn primary" data-act="examStart" data-st="' + st + '">' + (last ? 'NUEVO SIMULACRO (preguntas nuevas)' : 'EMPEZAR EL EXAMEN') + '</button>';
 };
 VIEWS.exam = function (app) {
   const d = S.draft; if (!d) { go('home'); return; }
-  if (d.idx >= EXAM_SLOTS.length) { finishExam(); return; }
-  const spec = examProblemSpec(d.seed, d.idx), n = EXAM_SLOTS.length;
+  const slots = EXAM_SLOTS_BY_STAGE[d.stage || 1], n = slots.length;
+  if (d.idx >= n) { finishExam(); return; }
+  const spec = examProblemSpec(d.seed, d.idx, d.stage, d.attempt);
   const sum = () => d.answers.reduce((a, b) => a + b.ms, 0);
   const qStart = Date.now();
   app.innerHTML = '<div class="top"><div class="bar"><i style="width:' + (d.idx / n * 100) + '%"></i></div><span class="timer" id="tm">⏱ ' + fmtT(sum()) + '</span></div><div class="chip">PREGUNTA ' + (d.idx + 1) + ' DE ' + n + '</div><div id="st"></div><div class="center"><button class="btn ghost small" data-act="examExit">Salir (puedes continuar después)</button></div>';
@@ -2484,9 +3231,11 @@ VIEWS.exam = function (app) {
   });
 };
 function finishExam() {
-  const d = S.draft, a = d.answers, cnt = (f) => a.filter(f).length;
-  const e1 = a.filter((x) => x.st === 1), e2 = a.filter((x) => x.st === 2), pc = (arr) => arr.length ? Math.round(arr.filter((x) => x.ok).length / arr.length * 100) : 0;
-  const total = a.reduce((s, x) => s + x.ms, 0), att = { n: S.exams.length + 1, at: Date.now(), pct: pc(a), p1: pc(e1), p2: pc(e2), time: total, avg: a.length ? total / a.length : 0, q: a, seed: d.seed };
+  const d = S.draft, a = d.answers, pc = (arr) => arr.length ? Math.round(arr.filter((x) => x.ok).length / arr.length * 100) : 0;
+  const total = a.reduce((s, x) => s + x.ms, 0), correct = a.filter((x) => x.ok).length;
+  const errCount = {}; a.forEach((x) => { if (!x.ok) errCount[x.tag || 'otro'] = (errCount[x.tag || 'otro'] || 0) + 1; });
+  const errBreak = Object.keys(errCount).map((tag) => ({ tag, n: errCount[tag] })).sort((x, y) => y.n - x.n);
+  const att = { n: S.exams.length + 1, at: Date.now(), exStage: d.stage, pct: pc(a), correct, total: a.length, time: total, avg: a.length ? total / a.length : 0, q: a, seed: d.seed, errBreak };
   a.forEach((x) => { upd(x.skill, x.dim, x.ok ? 1 : 0); if (!x.ok) logErr(x.tag || 'otro', x.skill); });
   S.exams.push(att); S.draft = null; S.xp += 30; touchStreak(); save(); go('examResult', { idx: S.exams.length - 1 });
 }
@@ -2496,26 +3245,37 @@ function fmtUser(p, ans) {
   if (p.kind === 'input') return t(ans);
   if (p.kind === 'frac') return t(ans.n) + ' ÷ ' + t(ans.d || '1');
   if (p.kind === 'qr') return 'cociente ' + t(ans.q) + ', residuo ' + t(ans.r || '0');
+  if (p.kind === 'sys') return 'x = ' + t(ans.x) + ' , y = ' + t(ans.y);
+  if (p.kind === 'point') return '(' + ans.x + ', ' + ans.y + ')';
+  if (p.kind === 'point2') return (ans.p1 && ans.p2) ? '(' + ans.p1.x + ', ' + ans.p1.y + ') y (' + ans.p2.x + ', ' + ans.p2.y + ')' : '<span class="mute">(sin respuesta)</span>';
   if (p.kind === 'choice') return p.options[ans] ? fx(p.options[ans].h) : '—';
   if (p.kind === 'multi') return ans.length ? ans.map((i) => fx(p.options[i].h)).join(' , ') : '<span class="mute">(sin respuesta)</span>';
   return '—';
 }
 VIEWS.examResult = function (app) {
   const at = S.exams[V.idx]; if (!at) { go('home'); return; }
-  const prev = V.idx > 0 ? S.exams[V.idx - 1] : null;
-  let h = '<div class="top"><button class="x" data-act="home">✕</button><h2 style="margin:0">' + (at.n > 1 ? 'Simulacro' : 'Examen final') + ' · Intento ' + at.n + '</h2></div><div class="card center"><div class="score">' + at.pct + '%</div><p><b>' + readiness(at.pct) + '</b></p>'
-    + '<div class="row"><div><div class="lbl">ETAPA 1</div><b>' + at.p1 + '%</b></div><div><div class="lbl">ETAPA 2</div><b>' + at.p2 + '%</b></div><div><div class="lbl">TIEMPO</div><b>' + fmtT(at.time) + '</b></div></div><p class="mute">Promedio por pregunta: ' + fmtT(at.avg) + '</p></div>';
+  const sameStage = S.exams.filter((x) => (x.exStage || null) === (at.exStage || null));
+  const idxInStage = sameStage.indexOf(at);
+  const prev = idxInStage > 0 ? sameStage[idxInStage - 1] : null;
+  let h = '<div class="top"><button class="x" data-act="home">✕</button><h2 style="margin:0">' + (at.n > 1 ? 'Simulacro' : 'Examen final') + (at.exStage ? ' · Etapa ' + at.exStage : ' · Etapas 1 y 2') + ' · Intento ' + at.n + '</h2></div><div class="card center"><div class="score">' + at.pct + '%</div><p><b>' + readiness(at.pct) + '</b></p>';
+  if (at.exStage) h += '<div class="row"><div><div class="lbl">CORRECTAS</div><b>' + at.correct + ' / ' + at.total + '</b></div><div><div class="lbl">TIEMPO</div><b>' + fmtT(at.time) + '</b></div></div>';
+  else h += '<div class="row"><div><div class="lbl">ETAPA 1</div><b>' + at.p1 + '%</b></div><div><div class="lbl">ETAPA 2</div><b>' + at.p2 + '%</b></div><div><div class="lbl">TIEMPO</div><b>' + fmtT(at.time) + '</b></div></div>';
+  h += '<p class="mute">Promedio por pregunta: ' + fmtT(at.avg) + '</p></div>';
   // historial
-  h += '<div class="card"><div class="lbl">MIS INTENTOS</div>' + S.exams.map((x) => '<div>Intento ' + x.n + ' → <b>' + x.pct + '%</b></div>').join('');
+  h += '<div class="card"><div class="lbl">MIS INTENTOS' + (at.exStage ? ' · ETAPA ' + at.exStage : '') + '</div>' + sameStage.map((x) => '<div>Intento ' + x.n + ' → <b>' + x.pct + '%</b></div>').join('');
   if (prev) { const df = at.pct - prev.pct; h += '<p>' + (df > 0 ? '📈 Mejoraste ' + df + ' puntos.' : df < 0 ? 'Bajaste ' + (-df) + ' puntos: revisa los temas marcados y vuelve a intentar.' : 'Mismo resultado que el intento anterior.') + '</p>'; }
   h += '</div>';
+  // errores más frecuentes
+  if (at.errBreak && at.errBreak.length) {
+    h += '<div class="card"><div class="lbl">❗ ERRORES MÁS FRECUENTES EN ESTE EXAMEN</div>' + at.errBreak.slice(0, 4).map((e) => '<div style="display:flex;justify-content:space-between;padding:4px 0"><span>' + esc(ERR_TAGS[e.tag] || e.tag) + '</span><b>' + e.n + '</b></div>').join('') + '</div>';
+  }
   // dominados / repasar
   const by = {}; at.q.forEach((x) => { (by[x.skill] = by[x.skill] || []).push(x.ok); });
   const good = Object.keys(by).filter((s) => by[s].every((v) => v)), bad = Object.keys(by).filter((s) => by[s].some((v) => !v));
-  h += '<div class="card"><div class="lbl">✅ YA DOMINAS</div>' + (good.length ? good.map((s) => '<span class="pill g">' + esc(SKILLS[s].name) + '</span>').join('') : '<span class="mute">Todavía nada al 100%; vamos por ello.</span>')
-    + '<div class="lbl" style="margin-top:12px">⚠️ NECESITAS REPASAR</div>' + (bad.length ? bad.map((s) => '<span class="pill r">' + esc(SKILLS[s].name) + '</span>').join('') : '<span class="mute">¡Nada! Sigue así.</span>') + '</div>';
+  h += '<div class="card"><div class="lbl">✅ HABILIDADES DOMINADAS</div>' + (good.length ? good.map((s) => '<span class="pill g">' + esc(SKILLS[s].name) + '</span>').join('') : '<span class="mute">Todavía nada al 100%; vamos por ello.</span>')
+    + '<div class="lbl" style="margin-top:12px">⚠️ HABILIDADES A REFORZAR</div>' + (bad.length ? bad.map((s) => '<span class="pill r">' + esc(SKILLS[s].name) + '</span>').join('') : '<span class="mute">¡Nada! Sigue así.</span>') + '</div>';
   if (bad.length) h += '<button class="btn primary" data-act="trainErrors" data-idx="' + V.idx + '">ENTRENAR MIS ERRORES</button>';
-  h += '<button class="btn" data-act="examIntro">NUEVO SIMULACRO (preguntas nuevas)</button>';
+  h += '<button class="btn" data-act="examIntro" data-st="' + (at.exStage || 1) + '">NUEVO SIMULACRO (preguntas nuevas)</button>';
   // detalle de errores
   const wrong = at.q.map((x, i) => Object.assign({ i }, x)).filter((x) => !x.ok);
   if (wrong.length) h += '<h3 style="margin-top:22px">Lo que falló, paso a paso</h3>';
@@ -2546,8 +3306,8 @@ const ACT = {
   quit() { go('home'); },
   errors() { go('errors'); },
   reviewStart() { startReview(); },
-  examIntro() { go('examIntro'); },
-  examStart() { S.draft = { seed: rnd() % 100000 + 1, idx: 0, answers: [], attempt: S.exams.length + 1 }; save(); go('exam'); },
+  examIntro(el) { go('examIntro', { st: el && el.getAttribute('data-st') ? +el.getAttribute('data-st') : 3 }); },
+  examStart(el) { const st = el && el.getAttribute('data-st') ? +el.getAttribute('data-st') : (V.st || 3); S.draft = { stage: st, seed: rnd() % 100000 + 1, idx: 0, answers: [], attempt: S.exams.length + 1 }; save(); go('exam'); },
   examResume() { go('exam'); },
   examExit() { go('home'); },
   examLast() { go('examResult', { idx: S.exams.length - 1 }); },
