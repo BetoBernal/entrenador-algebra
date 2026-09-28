@@ -2993,10 +2993,14 @@ function mountEx(root, spec, cfg) {
   }
   function lock() { root.querySelectorAll('input.ans').forEach((e) => { e.disabled = true; }); root.querySelectorAll('.opt').forEach((e) => { e.disabled = true; }); const k = root.querySelector('.keys'); if (k) k.style.display = 'none'; }
   function record(q) {
-    if (st.res) return st.res; upd(p.skill, p.dim, q);
-    if (q <= 0.4 && st.tag && !st.similar) S.errors[st.tag] = (S.errors[st.tag] || 0) + 1; // ejercicio que costó trabajo: pesa más
+    if (st.res) return st.res;
+    if (!cfg.readOnly) {
+      upd(p.skill, p.dim, q);
+      if (q <= 0.4 && st.tag && !st.similar) S.errors[st.tag] = (S.errors[st.tag] || 0) + 1; // ejercicio que costó trabajo: pesa más
+    }
     st.res = { ok: q > 0.5, q, hints: st.hints, wrongs: st.wrong, vid: st.vid, gave: st.sol, similar: st.similar, gen: p.gen, skill: p.skill, p };
-    save(); if (cfg.onResult) cfg.onResult(st.res); return st.res;
+    if (!cfg.readOnly) { save(); if (cfg.onResult) cfg.onResult(st.res); }
+    return st.res;
   }
   function submit() {
     if (st.done || (st.sol && mode !== 'exam')) return;
@@ -3007,11 +3011,12 @@ function mountEx(root, spec, cfg) {
     if (mode === 'exam') { if (st.ended) return; st.ended = true; cfg.onDone({ ok: r.ok, ans, tag: r.tag, ms: Date.now() - st.t0, p }); return; }
     if (r.ok) {
       const q = st.wrong === 0 && st.hints === 0 ? 1 : (st.hints <= 1 && st.wrong <= 1 ? 0.6 : 0.4);
-      st.done = true; record(q); addXP(q === 1 ? (st.similar ? 5 : 10) : 5); lock();
+      st.done = true; record(q); if (!cfg.readOnly) addXP(q === 1 ? (st.similar ? 5 : 10) : 5); lock();
       setFb(okFb(p, r, st, q, cfg.lesson));
       acts(); return;
     }
-    st.wrong++; st.tag = r.tag || 'otro'; S.attempts = S.attempts || {}; S.attempts[st.tag] = (S.attempts[st.tag] || 0) + 1; if (st.wrong === 1) logErr(st.tag, p.skill);
+    st.wrong++; st.tag = r.tag || 'otro';
+    if (!cfg.readOnly) { S.attempts = S.attempts || {}; S.attempts[st.tag] = (S.attempts[st.tag] || 0) + 1; if (st.wrong === 1) logErr(st.tag, p.skill); }
     if (p.kind === 'choice') { st.bad.add(st.sel); st.sel = null; const b = root.querySelectorAll('.opt'); b.forEach((e, i) => { e.classList.remove('sel'); if (st.bad.has(i)) { e.classList.add('no'); e.disabled = true; } }); }
     if (p.kind === 'multi') { st.sels = []; root.querySelectorAll('.opt').forEach((e) => e.classList.remove('sel')); }
     setFb('<div class="fb bad"><b>🤔 Mira qué falta</b>' + fx(String(r.msg || p.fallback || 'Todavía no. Revisa con calma o pide una pista.').replace(/^🤔 Mira qué falta\.?\s*/, '')) + '</div>');
@@ -3049,7 +3054,7 @@ function mountEx(root, spec, cfg) {
     else if (a === 'sol') showSolution();
     else if (a === 'video') {
       const v = cfg.video; if (!v) return;
-      st.vid = true; S.videos[v.youtubeId] = (S.videos[v.youtubeId] || 0) + 1; skObj(p.skill).vp = Math.min(0.3, (skObj(p.skill).vp || 0) + 0.15); record(0); save();
+      st.vid = true; if (!cfg.readOnly) { S.videos[v.youtubeId] = (S.videos[v.youtubeId] || 0) + 1; skObj(p.skill).vp = Math.min(0.3, (skObj(p.skill).vp || 0) + 0.15); } record(0); if (!cfg.readOnly) save();
       root.querySelector('#vid').innerHTML = '<div class="video"><p><b>' + esc(v.title) + '</b></p>' + videoEmbed(v) + '<p class="mute">Si no carga (sin internet), usa las pistas o la solución.</p></div>';
       acts();
     } else if (a === 'similar') { init(spec.seed + 7919 + rnd() % 1000, true); draw(); }
@@ -3105,13 +3110,19 @@ VIEWS.home = function (app) {
 };
 
 // ---------- Lecciones / retos / repaso ----------
-function startRun(cfg) { go('run', { run: Object.assign({ i: 0, stats: { total: 0, first: 0, q: 0 } }, cfg) }); }
+function startRun(cfg) { go('run', { run: Object.assign({ i: 0, peek: null, stats: { total: 0, first: 0, q: 0 } }, cfg) }); }
 VIEWS.run = function (app) {
   const R = V.run, n = R.steps.length;
   if (R.i >= n) { finishRun(app, R); return; }
-  const s = R.steps[R.i];
-  app.innerHTML = '<div class="top"><button class="x" data-act="quit">✕</button><div class="bar"><i style="width:' + (R.i / n * 100) + '%"></i></div></div><div class="chip">' + esc(s.ph || '') + '</div><div id="st"></div>';
-  const box = $('#st'), next = () => { R.i++; render(); window.scrollTo(0, 0); };
+  if (R.peek != null && (R.peek < 0 || R.peek >= R.i)) R.peek = null; // por seguridad
+  const reviewMode = R.peek != null;
+  const viewIdx = reviewMode ? R.peek : R.i;
+  const s = R.steps[viewIdx];
+  const backBtn = viewIdx > 0 ? '<button class="x" data-act="back" title="Ejercicio anterior">‹</button>' : '';
+  const fwdBtn = reviewMode ? '<button class="x" data-act="fwd" title="Volver a donde iba">›</button>' : '';
+  const chip = reviewMode ? '<div class="chip" style="background:var(--warn-l);color:var(--warn)">🔁 REPASO · ' + esc(s.ph || '') + '</div>' : '<div class="chip">' + esc(s.ph || '') + '</div>';
+  app.innerHTML = '<div class="top"><button class="x" data-act="quit">✕</button>' + backBtn + fwdBtn + '<div class="bar"><i style="width:' + (R.i / n * 100) + '%"></i></div></div>' + chip + (reviewMode ? '<p class="mute" style="margin:2px 0 0">Estás repasando; tu progreso no cambia.</p>' : '') + '<div id="st"></div>';
+  const box = $('#st'), next = () => { if (reviewMode) { ACT.fwd(); } else { R.i++; render(); window.scrollTo(0, 0); } };
   if (s.t === 'info') {
     box.innerHTML = '<h2 style="margin-top:10px">' + fx(s.h) + '</h2>' + (s.big ? '<div class="big">' + fx(s.big) + '</div>' : '') + '<p>' + fx(s.b) + '</p><button class="btn primary" id="go">ENTENDIDO</button>';
     $('#go').onclick = next;
@@ -3136,9 +3147,10 @@ VIEWS.run = function (app) {
     $('#go').onclick = next;
     $('#vbtn').onclick = () => { $('#vslot').innerHTML = '<div class="video">' + videoEmbed(v) + '</div><button class="btn primary" id="go2">YA LO VI · CONTINUAR</button>'; $('#go2').onclick = next; };
   } else if (s.t === 'gen') {
-    mountEx(box, { gen: s.gen, level: s.level, opts: s.opts, seed: rnd() }, {
-      mode: 'learn', lesson: R.kind === 'lesson', video: R.kind === 'lesson' ? lessonVideo(R.id) : null,
-      onResult: (r) => { if (!r.similar) { R.stats.total++; R.stats.q += r.q; if (r.q === 1) R.stats.first++; } if (R.onResult) R.onResult(r); },
+    if (s.__seed == null) s.__seed = rnd() % 100000000 + 1; // semilla estable: al repasar, se ve el mismo ejercicio
+    mountEx(box, { gen: s.gen, level: s.level, opts: s.opts, seed: s.__seed }, {
+      mode: 'learn', lesson: R.kind === 'lesson', video: R.kind === 'lesson' ? lessonVideo(R.id) : null, readOnly: reviewMode,
+      onResult: (r) => { if (reviewMode) return; if (!r.similar) { R.stats.total++; R.stats.q += r.q; if (r.q === 1) R.stats.first++; } if (R.onResult) R.onResult(r); },
       onDone: () => next(),
     });
   }
@@ -3304,6 +3316,8 @@ const ACT = {
   lesson(el) { startLesson(el.getAttribute('data-id')); },
   reto(el) { startLesson(el.getAttribute('data-id')); },
   quit() { go('home'); },
+  back() { const R = V.run; if (!R) return; const cur = R.peek != null ? R.peek : R.i; if (cur <= 0) return; R.peek = cur - 1; render(); window.scrollTo(0, 0); },
+  fwd() { const R = V.run; if (!R || R.peek == null) return; R.peek++; if (R.peek >= R.i) R.peek = null; render(); window.scrollTo(0, 0); },
   errors() { go('errors'); },
   reviewStart() { startReview(); },
   examIntro(el) { go('examIntro', { st: el && el.getAttribute('data-st') ? +el.getAttribute('data-st') : 3 }); },
