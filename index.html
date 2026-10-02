@@ -1109,24 +1109,76 @@ function g_partes(r, lvl) {
 }
 
 function g_lenguaje(r, lvl) {
-  const v = pickVar(r); const w = v === 'y' ? 'x' : 'y';
-  const m_ = MINUS;
-  // Cada distractor lleva su propia explicación: por qué NO representa la frase.
-  const T = [
-    ['El doble de ' + v + ', más 5', '2' + v + ' + 5', [['2' + v + ' ' + m_ + ' 5', 'La frase dice «más 5», no «menos 5».'], [v + '^2 + 5', '«El doble» es multiplicar por 2, no elevar al cuadrado.'], ['2(' + v + ' + 5)', 'Así también se duplicaría el 5; la frase solo duplica a ' + v + ' y después suma 5.'], [v + ' + 10', 'Aquí se duplicó el 5 en lugar de ' + v + '.']]],
-    ['El triple de ' + v + ', menos 4', '3' + v + ' ' + m_ + ' 4', [['3' + v + ' + 4', 'La frase dice «menos 4», no «más 4».'], ['3(' + v + ' ' + m_ + ' 4)', 'Así también se triplicaría el 4; la frase solo triplica a ' + v + ' y después resta 4.'], ['4 ' + m_ + ' 3' + v, 'El orden está invertido: al triple de ' + v + ' se le resta 4, no al revés.'], [v + '^3 ' + m_ + ' 4', '«El triple» es multiplicar por 3, no elevar al cubo.']]],
-    [v + ' aumentado en 7', v + ' + 7', [[v + ' ' + m_ + ' 7', '«Aumentado» significa sumar, no restar.'], ['7' + v, 'Eso es multiplicar por 7; «aumentado en 7» es sumar 7.'], [v + '^7', 'Eso es elevar a la séptima potencia; «aumentado en 7» es sumar 7.'], ['7 ' + m_ + ' ' + v, 'Eso es restarle ' + v + ' a 7; «aumentado en 7» es sumar 7.']]],
-    ['El cuadrado de ' + v, v + '^2', [['2' + v, 'Eso es el doble (' + v + ' + ' + v + '); el cuadrado es ' + v + ' por ' + v + '.'], [v + '^3', 'Eso es el cubo; el cuadrado lleva exponente 2.'], [v + ' + 2', 'Eso es sumar 2; el cuadrado es multiplicar ' + v + ' por sí misma.'], ['2^' + v, 'Están invertidos la base y el exponente: el cuadrado de ' + v + ' es ' + v + ' elevada a 2.']]],
-    ['El producto de ' + v + ' y ' + w, v + w, [[v + ' + ' + w, 'Eso es la suma; «producto» significa multiplicar.'], [v + '^2' + w, 'Aquí ' + v + ' aparece dos veces; el producto es ' + v + ' por ' + w + ' una sola vez.'], [v + ' ' + m_ + ' ' + w, 'Eso es la resta; «producto» significa multiplicar.'], ['2' + v + w, 'Sobra el 2: el producto de ' + v + ' y ' + w + ' no se duplica.']]],
-    ['La suma de ' + v + ' y el doble de ' + w, v + ' + 2' + w, [['2' + v + ' + ' + w, 'Se duplicó ' + v + ' en lugar de ' + w + '.'], ['2(' + v + ' + ' + w + ')', 'Así se duplicarían las dos letras; la frase solo duplica a ' + w + '.'], [v + w + ' + 2', 'Eso multiplica ' + v + ' por ' + w + ' y suma 2; la frase pide sumar ' + v + ' con el doble de ' + w + '.'], [v + ' + ' + w + '^2', '«El doble» es multiplicar por 2, no elevar al cuadrado.']]],
-    ['El cubo de ' + v + ', disminuido en 1', v + '^3 ' + m_ + ' 1', [[v + '^2 ' + m_ + ' 1', 'Eso es el cuadrado; el cubo lleva exponente 3.'], ['3' + v + ' ' + m_ + ' 1', 'Eso es el triple; el cubo es ' + v + '·' + v + '·' + v + '.'], ['(' + v + ' ' + m_ + ' 1)^3', 'Así se resta 1 antes de elevar; la frase eleva ' + v + ' al cubo y después resta 1.'], ['1 ' + m_ + ' ' + v + '^3', 'El orden está invertido: al cubo de ' + v + ' se le resta 1, no al revés.']]],
-    ['Cinco veces ' + v + ', menos ' + w, '5' + v + ' ' + m_ + ' ' + w, [['5 + ' + v + ' ' + m_ + ' ' + w, '«Cinco veces» es multiplicar por 5, no sumar 5.'], [v + '^5 ' + m_ + ' ' + w, '«Cinco veces» es multiplicar por 5, no elevar a la quinta potencia.'], ['5(' + v + ' ' + m_ + ' ' + w + ')', 'Así también se multiplicaría ' + w + '; la frase multiplica solo a ' + v + ' y después resta ' + w + '.'], [w + ' ' + m_ + ' 5' + v, 'El orden está invertido: a 5' + v + ' se le resta ' + w + ', no al revés.']]],
+  // Letras que no se confunden con palabras del español («a», «y», «e», «o», «u») cuando van solas en la frase.
+  const v = r.pick(['x', 'x', 'm', 'n', 't', 'w', 'b', 'k']);
+  const [p, q] = r.pick([['x', 'y'], ['m', 'n'], ['p', 'q'], ['a', 'b'], ['x', 'z']]);
+  const con = (z) => (z === 'y' || z === 'i' ? ' e ' : ' y ');
+  const vars = 'las variables ' + p + con(q) + q;
+  const E = v === 'k' ? 'z' : 'k';                 // letra de ejemplo para las pistas (distinta de la del ejercicio)
+  const k = r.int(4, 9);
+  // En frases compuestas el número sumado no coincide con el que multiplica (evita «el doble de x, más 2»).
+  const n = lvl === 1 ? r.int(2, 9) : r.pick([4, 5, 6, 7, 8, 9].filter((z) => z !== k));
+  const KW = { 4: 'cuatro', 5: 'cinco', 6: 'seis', 7: 'siete', 8: 'ocho', 9: 'nueve' }[k];
+  const Kc = KW.charAt(0).toUpperCase() + KW.slice(1);
+  const m_ = MINUS, lv = 'la variable ' + v;
+  const H = {
+    multiplo: ['«El doble» es multiplicar por 2; «el triple», por 3; «cuatro veces», por 4.', 'El número que multiplica se escribe pegado delante de la letra: el triple de ' + E + ' es 3' + E + '.', 'Multiplicar no es sumar ni elevar: 3' + E + ' no es ' + E + ' + 3 ni ' + E + '³.'],
+    sumaResta: ['«Aumentado en», «más» y «la suma» indican +; «disminuido en», «menos» y «la diferencia» indican −.', 'Escribe primero la variable y después el número, en el orden en que los dice la frase.', 'En la resta el orden importa: «' + E + ' disminuido en 4» es ' + E + ' − 4, no 4 − ' + E + '.'],
+    potencia: ['«El cuadrado» es elevar a la 2; «el cubo», elevar a la 3.', 'La variable es la base y el número va arriba, pequeño, como exponente: el cuadrado de ' + E + ' es ' + E + '².', 'No confundas potencia con multiplicación: ' + E + '² es ' + E + '·' + E + ', mientras que 2' + E + ' es ' + E + ' + ' + E + '.'],
+    compuesta: ['Separa la frase en dos partes: lo que le pasa a la variable y lo que se suma o se resta después.', 'Escribe primero la parte de la variable (por ejemplo 2' + E + ', ' + E + '² o ' + E + '³).', 'Luego agrega el número con + o −. Solo se usan paréntesis cuando la frase dice «de la suma» o «de la diferencia».'],
+    producto: ['«Producto» significa multiplicar.', 'Entre letras, la multiplicación se escribe juntándolas sin signo: el producto de r y s es rs.', 'Cada variable aparece una sola vez y sin coeficiente extra.'],
+    dosVar: ['Identifica las dos variables y la operación que las une: «la suma» es +, «la diferencia» es −.', 'Escribe las variables en el orden en que aparecen en la frase.', 'En la diferencia el orden importa: «la diferencia de r y s» es r − s, no s − r.'],
+    agrupada: ['Busca las palabras «de la suma» o «de la diferencia»: esa operación va primero, entre paréntesis.', 'Lo que se dice antes («el doble de», «el cuadrado de», «la mitad de») se aplica a todo el paréntesis: el doble de la suma de ' + E + ' y 1 es 2(' + E + ' + 1).', 'Compara: «el cuadrado de la suma» es (r + s)², pero «la suma de los cuadrados» es r² + s².'],
+    dosVarComp: ['Divide la frase en dos partes, una para cada variable.', 'Revisa a qué variable afecta cada palabra: «el doble de la variable s» afecta solo a s.', 'Une las dos partes con la operación que indica la frase (+ o −) y revisa el orden.'],
+  };
+  const RULE = {
+    multiplo: '«El doble», «el triple» o «n veces» se traducen como un número que multiplica a la variable.',
+    sumaResta: '«Aumentado» y «la suma» se traducen con +; «disminuido» y «la diferencia», con −, respetando el orden.',
+    potencia: '«El cuadrado» y «el cubo» se traducen como exponentes 2 y 3 sobre la variable.',
+    compuesta: 'Primero se traduce lo que le pasa a la variable y después se agrega el número con + o −.',
+    producto: 'El producto de dos variables se escribe juntándolas: es una multiplicación sin signo.',
+    dosVar: 'La suma o la diferencia de dos variables se escribe con + o −, en el orden de la frase.',
+    agrupada: '«De la suma» o «de la diferencia» indican que esa operación va primero, entre paréntesis; «la suma de los cuadrados» eleva cada variable por separado.',
+    dosVarComp: 'Cada palabra afecta solo a la variable que acompaña; después se unen las partes con + o −.',
+  };
+  // [id, tipo, frase, respuesta, [[distractor, por qué no]], pasos de la solución [[texto, expresión]]]
+  const N1 = [
+    ['m1', 'multiplo', 'El doble de ' + v, '2' + v, [[v + '^2', '«El doble» es multiplicar por 2, no elevar al cuadrado.'], [v + ' + 2', 'Eso es sumar 2; «el doble» es multiplicar por 2.'], ['⟦' + v + '|2⟧', 'Eso es la mitad; «el doble» es multiplicar por 2.']], [['«El doble» → multiplicar por 2: ', '2' + v]]],
+    ['m2', 'multiplo', 'El triple de ' + v, '3' + v, [[v + '^3', '«El triple» es multiplicar por 3, no elevar al cubo.'], [v + ' + 3', 'Eso es sumar 3; «el triple» es multiplicar por 3.'], ['⟦' + v + '|3⟧', 'Eso es la tercera parte; «el triple» es multiplicar por 3.']], [['«El triple» → multiplicar por 3: ', '3' + v]]],
+    ['m3', 'multiplo', Kc + ' veces ' + v, k + v, [[v + '^' + k, '«' + Kc + ' veces» es multiplicar por ' + k + ', no elevar a la ' + k + '.'], [v + ' + ' + k, 'Eso es sumar ' + k + '; «' + KW + ' veces» es multiplicar por ' + k + '.'], ['⟦' + v + '|' + k + '⟧', 'Eso es dividir entre ' + k + '; «' + KW + ' veces» es multiplicar.']], [['«' + Kc + ' veces» → multiplicar por ' + k + ': ', k + v]]],
+    ['s1', 'sumaResta', v + ' aumentado en ' + n, v + ' + ' + n, [[v + ' ' + m_ + ' ' + n, '«Aumentado» significa sumar, no restar.'], [n + v, 'Eso es multiplicar por ' + n + '; «aumentado en ' + n + '» es sumar ' + n + '.'], [n + ' ' + m_ + ' ' + v, 'Eso es restarle ' + v + ' a ' + n + '; «aumentado en ' + n + '» es sumar ' + n + '.']], [['«Aumentado en ' + n + '» → sumar ' + n + ': ', v + ' + ' + n]]],
+    ['s2', 'sumaResta', v + ' disminuido en ' + n, v + ' ' + m_ + ' ' + n, [[n + ' ' + m_ + ' ' + v, 'El orden está invertido: a ' + lv + ' se le quita ' + n + ', no al revés.'], [v + ' + ' + n, '«Disminuido» significa restar, no sumar.'], ['⟦' + v + '|' + n + '⟧', 'Eso es dividir entre ' + n + '; «disminuido en ' + n + '» es restar ' + n + '.']], [['«Disminuido en ' + n + '» → restar ' + n + ': ', v + ' ' + m_ + ' ' + n]]],
+    ['s3', 'sumaResta', 'La suma de ' + v + ' y ' + n, v + ' + ' + n, [[n + v, 'Eso es multiplicar; «la suma» indica sumar.'], [v + ' ' + m_ + ' ' + n, 'Eso es una resta; «la suma» indica sumar.'], [v + '^' + n, 'Eso es elevar a la ' + n + '; «la suma» indica sumar.']], [['«La suma» → sumar: ', v + ' + ' + n]]],
+    ['s4', 'sumaResta', 'La diferencia entre ' + v + ' y ' + n, v + ' ' + m_ + ' ' + n, [[n + ' ' + m_ + ' ' + v, 'El orden está invertido: primero va ' + lv + ' y se le resta ' + n + '.'], [v + ' + ' + n, '«La diferencia» indica restar, no sumar.'], [n + v, 'Eso es multiplicar; «la diferencia» indica restar.']], [['«La diferencia» → restar, en el orden de la frase: ', v + ' ' + m_ + ' ' + n]]],
+    ['p1', 'potencia', 'El cuadrado de ' + v, v + '^2', [['2' + v, 'Eso es el doble (' + v + ' + ' + v + '); el cuadrado es ' + v + ' por ' + v + '.'], [v + '^3', 'Eso es el cubo; el cuadrado lleva exponente 2.'], ['2^' + v, 'Están invertidos la base y el exponente: la base es ' + lv + ' y el exponente es 2.']], [['«El cuadrado» → exponente 2: ', v + '^2']]],
+    ['p2', 'potencia', 'El cubo de ' + v, v + '^3', [['3' + v, 'Eso es el triple (' + v + ' + ' + v + ' + ' + v + '); el cubo es ' + v + '·' + v + '·' + v + '.'], [v + '^2', 'Eso es el cuadrado; el cubo lleva exponente 3.'], ['3^' + v, 'Están invertidos la base y el exponente: la base es ' + lv + ' y el exponente es 3.']], [['«El cubo» → exponente 3: ', v + '^3']]],
   ];
-  const [phrase, good, bads] = r.pick(lvl === 1 ? T.slice(0, 4) : T);
+  const N2 = [
+    ['c1', 'compuesta', 'El doble de ' + v + ', más ' + n, '2' + v + ' + ' + n, [['2' + v + ' ' + m_ + ' ' + n, 'La frase dice «más ' + n + '», no «menos ' + n + '».'], [v + '^2 + ' + n, '«El doble» es multiplicar por 2, no elevar al cuadrado.'], ['2(' + v + ' + ' + n + ')', 'Así también se duplicaría el ' + n + '; la frase solo duplica ' + lv + ' y después suma ' + n + '.'], [v + ' + ' + 2 * n, 'Aquí se duplicó el ' + n + ' en lugar de ' + lv + '.']], [['«El doble de ' + v + '» → ', '2' + v], ['«más ' + n + '» → ', '+ ' + n], ['Resultado: ', '2' + v + ' + ' + n]]],
+    ['c2', 'compuesta', 'El triple de ' + v + ', menos ' + n, '3' + v + ' ' + m_ + ' ' + n, [['3' + v + ' + ' + n, 'La frase dice «menos ' + n + '», no «más ' + n + '».'], ['3(' + v + ' ' + m_ + ' ' + n + ')', 'Así también se triplicaría el ' + n + '; la frase solo triplica ' + lv + ' y después resta ' + n + '.'], [n + ' ' + m_ + ' 3' + v, 'El orden está invertido: al triple de ' + v + ' se le resta ' + n + ', no al revés.'], [v + '^3 ' + m_ + ' ' + n, '«El triple» es multiplicar por 3, no elevar al cubo.']], [['«El triple de ' + v + '» → ', '3' + v], ['«menos ' + n + '» → ', m_ + ' ' + n], ['Resultado: ', '3' + v + ' ' + m_ + ' ' + n]]],
+    ['c3', 'compuesta', 'El cuadrado de ' + v + ', aumentado en ' + n, v + '^2 + ' + n, [['(' + v + ' + ' + n + ')^2', 'Así se suma antes de elevar; la frase eleva ' + lv + ' al cuadrado y después suma ' + n + '.'], ['2' + v + ' + ' + n, 'Eso es el doble de ' + v + '; «el cuadrado» lleva exponente 2.'], [v + '^2 ' + m_ + ' ' + n, '«Aumentado» significa sumar, no restar.']], [['«El cuadrado de ' + v + '» → ', v + '^2'], ['«aumentado en ' + n + '» → ', '+ ' + n], ['Resultado: ', v + '^2 + ' + n]]],
+    ['c4', 'compuesta', 'El cubo de ' + v + ', disminuido en ' + n, v + '^3 ' + m_ + ' ' + n, [[v + '^2 ' + m_ + ' ' + n, 'Eso es el cuadrado; el cubo lleva exponente 3.'], ['3' + v + ' ' + m_ + ' ' + n, 'Eso es el triple; el cubo es ' + v + '·' + v + '·' + v + '.'], ['(' + v + ' ' + m_ + ' ' + n + ')^3', 'Así se resta antes de elevar; la frase eleva ' + lv + ' al cubo y después resta ' + n + '.'], [n + ' ' + m_ + ' ' + v + '^3', 'El orden está invertido: al cubo de ' + v + ' se le resta ' + n + ', no al revés.']], [['«El cubo de ' + v + '» → ', v + '^3'], ['«disminuido en ' + n + '» → ', m_ + ' ' + n], ['Resultado: ', v + '^3 ' + m_ + ' ' + n]]],
+    ['c5', 'compuesta', Kc + ' veces ' + v + ', más ' + n, k + v + ' + ' + n, [[k + ' + ' + v + ' + ' + n, '«' + Kc + ' veces» es multiplicar por ' + k + ', no sumar ' + k + '.'], [v + '^' + k + ' + ' + n, '«' + Kc + ' veces» es multiplicar por ' + k + ', no elevar a la ' + k + '.'], [k + '(' + v + ' + ' + n + ')', 'Así también se multiplicaría el ' + n + '; la frase multiplica solo ' + lv + ' y después suma ' + n + '.']], [['«' + Kc + ' veces ' + v + '» → ', k + v], ['«más ' + n + '» → ', '+ ' + n], ['Resultado: ', k + v + ' + ' + n]]],
+    ['pr1', 'producto', 'El producto de ' + vars, p + q, [[p + ' + ' + q, 'Eso es la suma; «producto» significa multiplicar.'], [p + '^2' + q, 'Aquí la variable ' + p + ' aparece dos veces; en el producto cada variable aparece una vez.'], [p + ' ' + m_ + ' ' + q, 'Eso es la resta; «producto» significa multiplicar.'], ['2' + p + q, 'Sobra el 2: el producto de ' + vars + ' no se duplica.']], [['«Producto» → multiplicar; entre letras se escriben juntas: ', p + q]]],
+    ['d1', 'dosVar', 'La suma de ' + vars, p + ' + ' + q, [[p + q, 'Eso es el producto; «la suma» indica sumar.'], [p + ' ' + m_ + ' ' + q, 'Eso es la diferencia; «la suma» indica sumar.'], ['2(' + p + ' + ' + q + ')', 'Sobra el 2: la frase no pide duplicar la suma.']], [['«La suma» → sumar las dos variables: ', p + ' + ' + q]]],
+    ['d2', 'dosVar', 'La diferencia de ' + vars, p + ' ' + m_ + ' ' + q, [[q + ' ' + m_ + ' ' + p, 'El orden está invertido: a la variable ' + p + ' se le resta la variable ' + q + '.'], [p + ' + ' + q, '«La diferencia» indica restar, no sumar.'], [p + q, 'Eso es el producto; «la diferencia» indica restar.']], [['«La diferencia» → restar en el orden de la frase: ', p + ' ' + m_ + ' ' + q]]],
+  ];
+  const N3 = [
+    ['g1', 'agrupada', 'El doble de la suma de ' + v + ' y ' + n, '2(' + v + ' + ' + n + ')', [['2' + v + ' + ' + n, 'Así solo se duplica ' + lv + '; la frase duplica toda la suma.'], ['(' + v + ' + ' + n + ')^2', '«El doble» es multiplicar por 2, no elevar al cuadrado.'], [v + ' + ' + 2 * n, 'Así solo se duplica el ' + n + '; la frase duplica toda la suma.'], ['2 + ' + v + ' + ' + n, '«El doble» es multiplicar por 2, no sumar 2.']], [['«La suma de ' + v + ' y ' + n + '» va primero: ', '(' + v + ' + ' + n + ')'], ['«El doble de» toda la suma: ', '2(' + v + ' + ' + n + ')']]],
+    ['g2', 'agrupada', 'El triple de la diferencia de ' + v + ' y ' + n, '3(' + v + ' ' + m_ + ' ' + n + ')', [['3' + v + ' ' + m_ + ' ' + n, 'Así solo se triplica ' + lv + '; la frase triplica toda la diferencia.'], ['3(' + n + ' ' + m_ + ' ' + v + ')', 'El orden de la resta está invertido: es ' + v + ' menos ' + n + '.'], ['(' + v + ' ' + m_ + ' ' + n + ')^3', '«El triple» es multiplicar por 3, no elevar al cubo.']], [['«La diferencia de ' + v + ' y ' + n + '» va primero: ', '(' + v + ' ' + m_ + ' ' + n + ')'], ['«El triple de» toda la diferencia: ', '3(' + v + ' ' + m_ + ' ' + n + ')']]],
+    ['g3', 'agrupada', 'El cuadrado de la suma de ' + vars, '(' + p + ' + ' + q + ')^2', [[p + '^2 + ' + q + '^2', 'Esa es la suma de los cuadrados; la frase pide elevar al cuadrado toda la suma.'], ['2(' + p + ' + ' + q + ')', 'Eso es el doble de la suma; «el cuadrado» lleva exponente 2.'], [p + ' + ' + q + '^2', 'Así solo se eleva la variable ' + q + '; la frase eleva toda la suma.']], [['«La suma de ' + vars + '» va primero: ', '(' + p + ' + ' + q + ')'], ['«El cuadrado de» toda la suma: ', '(' + p + ' + ' + q + ')^2']]],
+    ['g4', 'agrupada', 'La suma de los cuadrados de ' + vars, p + '^2 + ' + q + '^2', [['(' + p + ' + ' + q + ')^2', 'Ese es el cuadrado de la suma; la frase eleva cada variable y después suma.'], ['2' + p + ' + 2' + q, 'Eso es la suma de los dobles; «el cuadrado» lleva exponente 2.'], ['(' + p + q + ')^2', 'Eso es el cuadrado del producto; la frase pide una suma.']], [['Primero se eleva cada variable por separado y después se suman: ', p + '^2 + ' + q + '^2']]],
+    ['g5', 'agrupada', 'La mitad de la suma de ' + v + ' y ' + n, '⟦' + v + ' + ' + n + '|2⟧', [['⟦' + v + '|2⟧ + ' + n, 'Así solo se divide ' + lv + '; la frase divide toda la suma.'], ['2(' + v + ' + ' + n + ')', 'Eso es el doble; «la mitad» es dividir entre 2.'], ['⟦2|' + v + ' + ' + n + '⟧', 'La fracción está invertida: la suma va arriba y el 2 abajo.']], [['«La suma de ' + v + ' y ' + n + '» va primero: ', v + ' + ' + n], ['«La mitad de» toda la suma: ', '⟦' + v + ' + ' + n + '|2⟧']]],
+    ['g6', 'dosVarComp', 'La suma de la variable ' + p + ' y el doble de la variable ' + q, p + ' + 2' + q, [['2' + p + ' + ' + q, 'Se duplicó la variable ' + p + ' en lugar de la variable ' + q + '.'], ['2(' + p + ' + ' + q + ')', 'Así se duplicarían las dos variables; la frase solo duplica la variable ' + q + '.'], [p + ' + ' + q + '^2', '«El doble» es multiplicar por 2, no elevar al cuadrado.']], [['«El doble de la variable ' + q + '» → ', '2' + q], ['Se suma a la variable ' + p + ': ', p + ' + 2' + q]]],
+    ['g7', 'dosVarComp', Kc + ' veces la variable ' + p + ', menos la variable ' + q, k + p + ' ' + m_ + ' ' + q, [[k + ' + ' + p + ' ' + m_ + ' ' + q, '«' + Kc + ' veces» es multiplicar por ' + k + ', no sumar ' + k + '.'], [k + '(' + p + ' ' + m_ + ' ' + q + ')', 'Así también se multiplicaría la variable ' + q + '; la frase multiplica solo la variable ' + p + '.'], [q + ' ' + m_ + ' ' + k + p, 'El orden está invertido: a ' + k + p + ' se le resta la variable ' + q + ', no al revés.']], [['«' + Kc + ' veces la variable ' + p + '» → ', k + p], ['«menos la variable ' + q + '» → ', m_ + ' ' + q], ['Resultado: ', k + p + ' ' + m_ + ' ' + q]]],
+    ['g8', 'dosVarComp', 'El producto de ' + vars + ', aumentado en ' + n, p + q + ' + ' + n, [[p + ' + ' + q + ' + ' + n, '«Producto» es multiplicar las variables, no sumarlas.'], [p + '(' + q + ' + ' + n + ')', 'Así la variable ' + p + ' multiplicaría también al ' + n + '; la frase suma ' + n + ' después de multiplicar.'], [n + p + q, 'Eso multiplica por ' + n + '; «aumentado en ' + n + '» es sumar ' + n + '.']], [['«El producto de ' + vars + '» → ', p + q], ['«aumentado en ' + n + '» → ', '+ ' + n], ['Resultado: ', p + q + ' + ' + n]]],
+    ['g9', 'dosVarComp', 'El cuadrado de la variable ' + p + ', menos el doble de la variable ' + q, p + '^2 ' + m_ + ' 2' + q, [['2' + p + ' ' + m_ + ' ' + q + '^2', 'Se intercambiaron las operaciones: el cuadrado es de la variable ' + p + ' y el doble, de la variable ' + q + '.'], ['(' + p + ' ' + m_ + ' 2' + q + ')^2', 'Así se eleva toda la resta; la frase solo eleva la variable ' + p + '.'], [p + '^2 ' + m_ + ' ' + q + '^2', 'La variable ' + q + ' se duplica, no se eleva al cuadrado.']], [['«El cuadrado de la variable ' + p + '» → ', p + '^2'], ['«menos el doble de la variable ' + q + '» → ', m_ + ' 2' + q], ['Resultado: ', p + '^2 ' + m_ + ' 2' + q]]],
+  ];
+  const [id, type, phrase, good, bads, steps] = r.pick(lvl === 1 ? N1 : lvl === 2 ? N2 : N3);
   const opts = withOptions(r, [{ h: M(good) }], bads.map(([b, f]) => ({ h: M(b), fb: f })), 4);
   return P({ kind: 'choice', dim: 'reconoce', instr: '¿Qué expresión algebraica representa esta frase?', expr: '<span class="phrase">«' + esc2(phrase) + '»</span>', options: opts,
-    hints: ['Traduce palabra por palabra: «el doble» es multiplicar por 2, «más» es +, «menos» es −.', 'Decide primero qué operación va con la letra y cuál con el número suelto.', 'Escribe primero la parte de la letra y después agrega el +/− con el otro número.'],
-    solution: ['Traducimos cada palabra: ' + M(good) + '.'], answer: M(good), fallbackTag: 'otro', fallback: 'Traduce con calma cada palabra a una operación.' });
+    hints: H[type], rule: RULE[type], vkey: 'lenguaje:' + id,
+    solution: steps.map(([t, e]) => t + M(e) + (/^Resultado/.test(t) ? '.' : '')), answer: M(good), fallbackTag: 'otro', fallback: RULE[type] });
 }
 function esc2(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
@@ -1738,6 +1790,8 @@ function g_factorComun(r, lvl) {
     fallback: 'Saca el factor que se repite en todos los términos y escribe lo que queda dentro de un paréntesis. Comprueba multiplicando.' });
 }
 
+// Presentación canónica de binomios: «−x² + 49» se muestra como «49 − x²» (misma expresión, patrón a² − b² visible).
+function canonBin(str) { return String(str).replace(/(^|\()−([^\s()+−]+) \+ ([^\s()+−]+)(?=\)|$)/g, '$1$3 − $2'); }
 function g_difCuadrados(r, lvl, opts) {
   opts = opts || {};
   const v = r.pick(['x', 'x', 'x', 'a', 'y', 'm', 't']); const [p, q] = twoVars(r);
@@ -1755,11 +1809,12 @@ function g_difCuadrados(r, lvl, opts) {
   if (gcf) { poly = poly.mul(gcf); factors = [gcf, F1, F2]; }
   if (poly.terms().length < 2 || canFactorMore(F1) || canFactorMore(F2)) return g_difCuadrados(r, lvl, opts);
   // gcf con la letra: si gcf tiene v y A tiene v, todo bien
-  const steps = gcf ? ['Primero el factor común: ' + M(fs(poly) + ' = ' + fs(gcf) + '(' + fs(F1.mul(F2)) + ')'), 'Dentro del paréntesis hay una diferencia de cuadrados: ' + M('(' + fs(A) + ')^2 ' + MINUS + ' (' + fs(B) + ')^2'), 'Se factoriza como (a + b)(a − b): ' + M(fs(gcf) + par(F2) + par(F1))]
-    : ['Es una diferencia de cuadrados: ' + M(fs(A.mul(A)) + ' = (' + fs(A) + ')^2') + ' y ' + M(fs(B.mul(B)) + ' = (' + fs(B) + ')^2'), 'Se factoriza como (a + b)(a − b): ' + M(par(F2) + par(F1)), 'Comprobamos multiplicando de regreso: ' + M(par(F2) + par(F1) + ' = ' + fs(poly))];
-  return mkFactorProblem({ poly, factors, instr: 'Factoriza <b>completamente</b>.', expr: M(fs(poly)), vars: [v, p, q], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
-    hints: gcf ? ['Antes de nada, ¿hay un factor común en todos los términos?', 'Después de sacarlo, mira lo que queda: ¿es una resta de cuadrados perfectos?', 'Saca ' + fs(gcf) + '; queda ' + fs(F1.mul(F2)) + '.'] : ['Es una resta (no suma) de dos términos que son cuadrados perfectos.', 'Saca la raíz cuadrada de cada término: ' + fs(A) + ' y ' + fs(B) + '.', 'Escribe (a + b)(a − b) con a = ' + fs(A) + ' y b = ' + fs(B) + '.'],
-    solution: steps, answer: M(factors.map(par).join('')), fallback: 'Diferencia de cuadrados: a² − b² = (a + b)(a − b). Si hay factor común, sácalo primero.' });
+  const PF = canonBin(par(F2) + par(F1)), PS = canonBin(fs(poly));
+  const steps = gcf ? ['Primero el factor común: ' + M(PS + ' = ' + fs(gcf) + '(' + canonBin(fs(F1.mul(F2))) + ')'), 'Dentro del paréntesis hay una diferencia de cuadrados: ' + M('(' + fs(A) + ')^2 ' + MINUS + ' (' + fs(B) + ')^2'), 'Se factoriza como (a + b)(a − b): ' + M(fs(gcf) + PF)]
+    : ['Es una diferencia de cuadrados: ' + M(fs(A.mul(A)) + ' = (' + fs(A) + ')^2') + ' y ' + M(fs(B.mul(B)) + ' = (' + fs(B) + ')^2'), 'Se factoriza como (a + b)(a − b): ' + M(PF), 'Comprobamos multiplicando de regreso: ' + M(PF + ' = ' + PS)];
+  return mkFactorProblem({ poly, factors, instr: 'Factoriza <b>completamente</b>.', expr: M(PS), vars: [v, p, q], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
+    hints: gcf ? ['Antes de nada, ¿hay un factor común en todos los términos?', 'Después de sacarlo, mira lo que queda: ¿es una resta de cuadrados perfectos?', 'Saca ' + fs(gcf) + '; queda ' + canonBin(fs(F1.mul(F2))) + '.'] : ['Es una resta (no suma) de dos términos que son cuadrados perfectos.', 'Saca la raíz cuadrada de cada término: ' + fs(A) + ' y ' + fs(B) + '.', 'Escribe (a + b)(a − b) con a = ' + fs(A) + ' y b = ' + fs(B) + '.'],
+    solution: steps, answer: M(canonBin(factors.map(par).join(''))), fallback: 'Diferencia de cuadrados: a² − b² = (a + b)(a − b). Si hay factor común, sácalo primero.' });
 }
 
 function g_tcp(r, lvl, opts) {
@@ -1839,9 +1894,10 @@ function g_cubos(r, lvl) {
   const F2 = A.mul(A).add(sum ? A.mul(B).neg() : A.mul(B)).add(B.mul(B));
   const poly = F1.mul(F2);
   const cubeA = A.pow(3), cubeB = B.pow(3);
-  return mkFactorProblem({ poly, factors: [F1, F2], instr: 'Factoriza esta ' + (sum ? '<b>suma</b>' : '<b>diferencia</b>') + ' de cubos.', expr: MP(poly), vars: [v, p, q], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
+  const P1 = canonBin(par(F1)), PS = canonBin(fs(poly));
+  return mkFactorProblem({ poly, factors: [F1, F2], instr: 'Factoriza esta ' + (sum ? '<b>suma</b>' : '<b>diferencia</b>') + ' de cubos.', expr: M(PS), vars: [v, p, q], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
     hints: ['Cada término es un cubo perfecto. Saca la raíz cúbica de cada uno.', 'Primer factor: la ' + (sum ? 'suma' : 'resta') + ' de las raíces. Segundo factor: cuadrado de la primera − (o +) producto + cuadrado de la segunda.', 'Raíces cúbicas: ' + fs(A) + ' y ' + fs(B) + '. Primer factor: ' + par(F1)],
-    solution: ['Raíces cúbicas: ' + M(fs(cubeA) + ' = (' + fs(A) + ')^3') + ' y ' + M(fs(cubeB) + ' = (' + fs(B) + ')^3'), 'Primer factor: ' + M(par(F1)), 'Segundo factor: ' + M('(' + fs(A) + ')^2 ' + (sum ? MINUS : '+') + ' (' + fs(A) + ')(' + fs(B) + ') + (' + fs(B) + ')^2 = ' + fs(F2)), 'Factorizado: ' + M(par(F1) + par(F2))], answer: M(par(F1) + par(F2)),
+    solution: ['Raíces cúbicas: ' + M(fs(cubeA) + ' = (' + fs(A) + ')^3') + ' y ' + M(fs(cubeB) + ' = (' + fs(B) + ')^3'), 'Primer factor: ' + M(P1), 'Segundo factor: ' + M('(' + fs(A) + ')^2 ' + (sum ? MINUS : '+') + ' (' + fs(A) + ')(' + fs(B) + ') + (' + fs(B) + ')^2 = ' + fs(F2)), 'Factorizado: ' + M(P1 + par(F2))], answer: M(P1 + par(F2)),
     fallback: 'a³ ± b³ = (a ± b)(a² ∓ ab + b²). El signo del primer factor es el del binomio; en el trinomio el signo del medio es el contrario.' });
 }
 
@@ -2282,39 +2338,282 @@ function g_aplicacionSistema(r) {
 }
 
 // ---- preguntas de comprensión (¿por qué funciona?)
+// Banco «Piensa en el porqué»: cada habilidad trae pistas propias y varias preguntas con estructuras distintas.
+// Cada pregunta es una función (r) que varía números y devuelve { k, q, ok, bad: [[opción, por qué no]] }.
+const _SUPD = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+const SUPN = (n) => String(n).split('').map((d) => _SUPD[+d]).join('');
 const WHY = {
-  semejantes: [
-    { q: '¿Por qué <b>3x²</b> y <b>5x</b> no se pueden sumar en un solo término?', ok: 'Porque no tienen la misma parte literal (x² y x son distintas).', bad: ['Porque 3 y 5 son números distintos.', 'Porque el resultado sería demasiado grande.', 'Porque solo se suman términos con coeficiente igual.'] },
-    { q: 'Al reducir <b>4x² + 3x²</b> obtenemos <b>7x²</b>. ¿Por qué el exponente no cambia?', ok: 'Porque sumamos «cuántas x²» hay; la parte literal x² es la misma.', bad: ['Porque los exponentes siempre se quedan igual.', 'Porque 2 + 2 = 4.', 'Porque el exponente se suma solo al multiplicar.'] },
-  ],
-  resta: [{ q: 'En <b>(5x + 2) − (3x − 4)</b>, ¿por qué el −4 se convierte en +4?', ok: 'Porque el signo − delante del paréntesis cambia el signo de todos los términos de adentro.', bad: ['Porque los números negativos siempre pasan a positivos.', 'Porque se resta 4 dos veces.', 'Porque el 2 es positivo.'] }],
-  agrupacion: [{ q: '¿Qué significa un signo <b>−</b> delante de un paréntesis?', ok: 'Que hay que cambiar el signo de cada término que está adentro.', bad: ['Que el paréntesis se puede ignorar.', 'Que solo cambia el primer término.', 'Que se multiplica por 2.'] }],
-  divMon: [{ q: 'En <b>x⁵ ÷ x²</b>, ¿por qué el resultado es x³?', ok: 'Porque se tachan 2 letras x de arriba y de abajo, y quedan 5 − 2 = 3.', bad: ['Porque 5 ÷ 2 = 2.5 y se redondea.', 'Porque los exponentes se suman.', 'Porque x²  se multiplica por x⁵.'] }],
-  exponentes: [
-    { q: '¿Por qué <b>x² · x³ = x⁵</b>?', ok: 'Porque x·x · x·x·x tiene 5 letras x multiplicadas.', bad: ['Porque 2 × 3 = 6, y se resta 1.', 'Porque así lo dice la regla y no se puede explicar.', 'Porque los exponentes se multiplican.'] },
-    { q: '¿Por qué <b>(x²)³ = x⁶</b>?', ok: 'Porque son 3 grupos de x², es decir 3 × 2 = 6 letras x.', bad: ['Porque 2 + 3 = 5 y se suma 1.', 'Porque la potencia solo afecta al 3.', 'Porque (x²)³ = x²·3.'] },
-  ],
-  signos: [{ q: '¿Por qué <b>(−2)³ = −8</b>?', ok: 'Porque hay tres factores negativos (cantidad impar), y el resultado conserva el signo −.', bad: ['Porque el exponente siempre vuelve negativo el resultado.', 'Porque 2³ = 8 y el signo no importa.', 'Porque (−2)·3 = −6.'] }],
-  distributiva: [{ q: 'En <b>3(x + 4) = 3x + 12</b>, ¿por qué el 3 también multiplica al 4?', ok: 'Porque el 3 multiplica a <b>todo</b> lo que hay dentro del paréntesis, término por término.', bad: ['Porque el 4 es más grande que el 3.', 'Porque solo multiplica al primer término.', 'Porque los números siempre se multiplican entre sí.'] }],
-  multPol: [{ q: 'Al multiplicar <b>(x + 2)(x + 5)</b>, ¿cuántos productos parciales aparecen?', ok: '4: cada término del primer paréntesis por cada término del segundo.', bad: ['2: x·x y 2·5.', '3: uno por cada signo.', '1: solo el producto total.'] }],
-  cuadrado: [
-    { q: '¿Por qué <b>(x + 4)² no es x² + 16</b>?', ok: 'Porque (x+4)(x+4) produce también dos productos 4x y 4x, que forman el término del medio 8x.', bad: ['Porque 4² = 8.', 'Porque el cuadrado solo afecta a la x.', 'Porque no se puede elevar un binomio al cuadrado.'] },
-    { q: 'En <b>(x + 3)² = x² + 6x + 9</b>, ¿de dónde sale el 6x?', ok: 'De sumar los dos rectángulos 3x + 3x del modelo de áreas.', bad: ['De multiplicar 3 × 2 × x.', 'De sumar 3 + 3 sin la x.', 'De elevar 3 al cuadrado.'] },
-  ],
-  conjugados: [{ q: '¿Por qué <b>(x + 5)(x − 5) = x² − 25</b> no tiene término con x?', ok: 'Porque los productos cruzados −5x y +5x se cancelan.', bad: ['Porque 5 − 5 = 0 antes de multiplicar.', 'Porque la x desaparece al multiplicar.', 'Porque solo se multiplican los primeros términos.'] }],
-  cubo: [{ q: '¿Por qué <b>(x + 2)³ no es x³ + 8</b>?', ok: 'Porque al multiplicar tres veces aparecen otros productos intermedios (6x² y 12x).', bad: ['Porque 2³ = 6.', 'Porque el cubo solo afecta a la x.', 'Porque un binomio no se puede elevar al cubo.'] }],
-  factorComun: [{ q: '¿Cómo compruebas que <b>3x(x + 4)</b> es la factorización correcta de <b>3x² + 12x</b>?', ok: 'Multiplicando de regreso: 3x·x + 3x·4 debe dar 3x² + 12x.', bad: ['Sumando 3x + x + 4.', 'Dividiendo 3x² + 12x entre 12.', 'No hay forma de comprobarlo.'] }],
-  difCuadrados: [{ q: '¿Por qué <b>x² + 25</b> no se factoriza como diferencia de cuadrados?', ok: 'Porque es una suma: sus factores conjugados darían x² − 25, no x² + 25.', bad: ['Porque 25 no es un cuadrado perfecto.', 'Porque tiene demasiados términos.', 'Porque la x está al cuadrado.'] }],
-  trinomio1: [{ q: 'Al factorizar <b>x² + 7x + 10</b> buscamos dos números. ¿Qué deben cumplir?', ok: 'Multiplicados dan 10 y sumados dan 7.', bad: ['Sumados dan 10 y multiplicados dan 7.', 'Multiplicados dan 7 y restados dan 10.', 'Deben ser los dos iguales.'] }],
-  cubos: [{ q: '¿Cómo puedes comprobar que <b>(x + 2)(x² − 2x + 4) = x³ + 8</b>?', ok: 'Multiplicando: los términos intermedios se cancelan y quedan x³ y 8.', bad: ['Sumando 2 + 2 + 4.', 'Elevando (x + 2) al cuadrado.', 'Restando x³ − 8.'] }],
+  semejantes: { hints: ['Compara la parte literal: las mismas letras con los mismos exponentes.', 'El coeficiente puede ser distinto; lo que debe coincidir es la parte literal.', 'Al reducir semejantes solo se suman los coeficientes; la parte literal se copia igual.'], items: [
+    (r) => { const a = r.int(2, 9), b = r.pick([2, 3, 4, 5, 6, 7, 8, 9].filter((x) => x !== a)), e = r.int(2, 3), E = SUPN(e);
+      return { k: 's1', q: '¿Por qué <b>' + a + 'x' + E + '</b> y <b>' + b + 'x</b> no se pueden sumar en un solo término?', ok: 'Porque no tienen la misma parte literal (x' + E + ' y x son distintas).',
+        bad: [['Porque ' + a + ' y ' + b + ' son números distintos.', 'Los coeficientes pueden ser distintos; lo que impide sumarlos es que x' + E + ' y x son partes literales diferentes.'],
+          ['Porque el resultado sería demasiado grande.', 'El tamaño del resultado no importa; importa si las partes literales coinciden.'],
+          ['Porque solo se suman términos con coeficiente igual.', 'Los coeficientes no tienen que ser iguales (' + a + 'x' + E + ' + ' + b + 'x' + E + ' = ' + (a + b) + 'x' + E + '); deben coincidir las letras y sus exponentes.']] }; },
+    (r) => { const a = r.int(2, 9), b = r.int(2, 9), e = r.int(2, 4), E = SUPN(e);
+      return { k: 's2', q: 'Al reducir <b>' + a + 'x' + E + ' + ' + b + 'x' + E + '</b> obtenemos <b>' + (a + b) + 'x' + E + '</b>. ¿Por qué el exponente no cambia?', ok: 'Porque sumamos «cuántas x' + E + '» hay; la parte literal x' + E + ' es la misma.',
+        bad: [['Porque los exponentes siempre se quedan igual.', 'Al multiplicar, los exponentes sí cambian; aquí se quedan igual porque sumamos términos semejantes.'],
+          ['Porque ' + e + ' + ' + e + ' = ' + (2 * e) + ' y luego se divide entre 2.', 'No se hace ninguna cuenta con los exponentes: al sumar semejantes la parte literal se copia igual.'],
+          ['Porque el exponente solo cambia cuando los coeficientes son iguales.', 'Aunque los coeficientes sean iguales, al sumar el exponente no cambia: x' + E + ' + x' + E + ' = 2x' + E + '.']] }; },
+    (r) => { const a = r.int(2, 9), b = r.int(2, 9);
+      return { k: 's3', q: '¿Por qué <b>' + a + 'xy</b> y <b>' + b + 'yx</b> sí son términos semejantes?', ok: 'Porque tienen las mismas letras con los mismos exponentes; el orden de las letras no importa (xy = yx).',
+        bad: [['Porque sus coeficientes son parecidos.', 'Los coeficientes no deciden si son semejantes; decide la parte literal.'],
+          ['No son semejantes, porque las letras están en distinto orden.', 'El orden de los factores no altera el producto: xy y yx son la misma parte literal.'],
+          ['Porque los dos tienen dos letras, sin importar cuáles.', 'No basta con tener dos letras: x²y y xy² también tienen dos y no son semejantes.']] }; },
+    (r) => { const a = r.int(5, 9), b = r.int(2, a - 2);
+      return { k: 's4', q: 'Al reducir <b>' + a + 'x − ' + b + 'x</b>, ¿por qué el resultado es <b>' + (a - b) + 'x</b>?', ok: 'Porque los dos términos tienen la parte literal x, así que solo se restan los coeficientes: ' + a + ' − ' + b + ' = ' + (a - b) + '.',
+        bad: [['Porque se tacha la x de uno de los dos términos.', 'No se tacha ninguna x: x es la parte literal común y se conserva en el resultado.'],
+          ['Porque se restan los coeficientes y también los exponentes.', 'Los exponentes no se restan: si se restaran, x quedaría con exponente 0.'],
+          ['Porque la x siempre vale 1.', 'x puede valer cualquier número; el resultado vale para todos porque ' + a + ' veces x menos ' + b + ' veces x deja ' + (a - b) + ' veces x.']] }; },
+  ] },
+  resta: { hints: ['Fíjate qué signo está justo antes del paréntesis.', 'Un − delante del paréntesis equivale a multiplicar por −1 cada término de adentro.', 'Revisa el signo de cada término de adentro, no solo el del primero.'], items: [
+    (r) => { const a = r.int(4, 9), c = r.int(2, a - 1), b = r.int(1, 9), d = r.pick([1, 2, 3, 4, 5, 6, 7, 8, 9].filter((x) => x !== b));
+      return { k: 'r1', q: 'En <b>(' + a + 'x + ' + b + ') − (' + c + 'x − ' + d + ')</b>, ¿por qué el −' + d + ' se convierte en +' + d + '?', ok: 'Porque el signo − delante del paréntesis cambia el signo de todos los términos de adentro.',
+        bad: [['Porque los números negativos siempre pasan a positivos.', 'Un negativo no siempre se vuelve positivo; cambia porque el − de afuera invierte cada signo de adentro.'],
+          ['Porque se resta ' + d + ' dos veces.', 'Solo se resta una vez; lo que pasa es que el − afecta a −' + d + ' y lo vuelve +' + d + '.'],
+          ['Porque el ' + b + ' es positivo.', 'El signo del ' + b + ' no influye: el cambio viene del − que está antes del paréntesis.']] }; },
+    (r) => { const a = r.int(4, 9), c = r.int(2, a - 1), b = r.int(1, 9), d = r.int(1, 9);
+      return { k: 'r2', q: 'En <b>(' + a + 'x + ' + b + ') − (' + c + 'x + ' + d + ')</b>, ¿por qué el ' + c + 'x queda como −' + c + 'x?', ok: 'Porque restar el paréntesis es sumar el opuesto de cada término: el opuesto de +' + c + 'x es −' + c + 'x.',
+        bad: [['Porque ' + c + 'x es menor que ' + a + 'x.', 'El tamaño no importa; el signo cambia por el − que está antes del paréntesis.'],
+          ['Porque solo el primer término del paréntesis cambia de signo.', 'Cambian todos: también +' + d + ' se vuelve −' + d + '.'],
+          ['Porque los términos con x siempre son negativos.', 'Los términos con x no tienen signo fijo; el − de afuera es el que invierte el signo.']] }; },
+    (r) => { const a = r.int(5, 9), b = r.int(2, a - 2), dd = a - b;
+      return { k: 'r3', q: '¿Por qué <b>A − B</b> no es lo mismo que <b>B − A</b>? Por ejemplo, <b>' + a + 'x − ' + b + 'x = ' + dd + 'x</b>.', ok: 'Porque la resta no es conmutativa: ' + b + 'x − ' + a + 'x da el resultado con signo contrario, −' + dd + 'x.',
+        bad: [['Sí es lo mismo: el orden no importa al restar.', 'El orden sí importa: ' + a + 'x − ' + b + 'x = ' + dd + 'x, pero ' + b + 'x − ' + a + 'x = −' + dd + 'x.'],
+          ['Porque en B − A no se pueden juntar los términos.', 'Sí se pueden juntar; solo que el resultado sale con el signo contrario.'],
+          ['Porque B − A siempre da cero.', 'Solo daría cero si A y B fueran iguales.']] }; },
+  ] },
+  agrupacion: { hints: ['Pregúntate qué operación representa un − antes del paréntesis.', 'Ese − equivale a multiplicar por −1 todo lo de adentro.', 'Con varios signos de agrupación, quítalos de adentro hacia afuera.'], items: [
+    () => ({ k: 'a1', q: '¿Qué significa un signo <b>−</b> delante de un paréntesis?', ok: 'Que hay que cambiar el signo de cada término que está adentro.',
+      bad: [['Que el paréntesis se puede ignorar.', 'No se ignora: quitarlo obliga a cambiar los signos de adentro.'],
+        ['Que solo cambia el primer término.', 'Cambian todos los términos de adentro, no solo el primero.'],
+        ['Que se multiplica por 2.', 'Un − delante equivale a multiplicar por −1, no por 2.']] }),
+    (r) => { const a = r.int(2, 9), b = r.int(1, 9);
+      return { k: 'a2', q: 'Al quitar el paréntesis en <b>−(' + a + 'x − ' + b + ')</b>, ¿por qué queda <b>−' + a + 'x + ' + b + '</b>?', ok: 'Porque el − equivale a multiplicar por −1: (−1)(' + a + 'x) = −' + a + 'x y (−1)(−' + b + ') = +' + b + '.',
+        bad: [['Porque solo cambia el signo del último término.', 'Cambia el signo de todos: el ' + a + 'x también pasó a −' + a + 'x.'],
+          ['Porque el paréntesis se quita sin cambiar nada.', 'Si no cambiara nada quedaría ' + a + 'x − ' + b + '; el − de afuera invierte los dos signos.'],
+          ['Porque −' + b + ' y +' + b + ' valen lo mismo.', '−' + b + ' y +' + b + ' son opuestos; el cambio lo produce el − que está antes del paréntesis.']] }; },
+    (r) => { const a = r.int(2, 9), b = r.int(1, 9);
+      return { k: 'a3', q: '¿Por qué en <b>' + a + ' − [x − (' + b + ' − x)]</b> conviene quitar primero el paréntesis ( )?', ok: 'Porque los signos de agrupación se quitan de adentro hacia afuera; así cada signo se aplica a lo que realmente encierra.',
+        bad: [['Porque el corchete no afecta a nada.', 'El corchete sí afecta: el − que tiene delante cambia los signos de todo lo que encierra.'],
+          ['Porque los paréntesis siempre van primero, aunque estén afuera.', 'Lo que decide el orden es cuál está más adentro, no el tipo de signo.'],
+          ['Porque así desaparece el signo −.', 'Los signos − no desaparecen: se aplican a cada término que encierran.']] }; },
+  ] },
+  divMon: { hints: ['Escribe cada potencia como multiplicación de letras: x⁵ = x·x·x·x·x.', 'Cada x de abajo se cancela con una x de arriba (x/x = 1).', 'Cuenta cuántas letras quedan: eso es restar los exponentes. Los coeficientes se dividen.'], items: [
+    (r) => { const m = r.int(5, 9), n = r.int(2, m - 2);
+      return { k: 'd1', q: 'En <b>x' + SUPN(m) + ' ÷ x' + SUPN(n) + '</b>, ¿por qué el resultado es <b>x' + SUPN(m - n) + '</b>?', ok: 'Porque se cancelan ' + n + ' letras x de arriba con las ' + n + ' de abajo, y quedan ' + m + ' − ' + n + ' = ' + (m - n) + '.',
+        bad: [['Porque los exponentes se dividen: ' + m + ' ÷ ' + n + '.', 'Los exponentes no se dividen: se restan, porque cada x de abajo cancela una x de arriba.'],
+          ['Porque los exponentes se suman.', 'Sumar exponentes es para multiplicar; al dividir se restan.'],
+          ['Porque x' + SUPN(n) + ' se multiplica por x' + SUPN(m) + '.', 'Aquí hay una división, no una multiplicación.']] }; },
+    (r) => { const a = r.int(3, 5), b = r.int(2, 4), m = r.int(4, 7), n = r.int(1, m - 2), N = n === 1 ? '' : SUPN(n);
+      return { k: 'd2', q: 'En <b>' + a * b + 'x' + SUPN(m) + ' ÷ ' + b + 'x' + N + ' = ' + a + 'x' + SUPN(m - n) + '</b>, ¿por qué el coeficiente es ' + a + '?', ok: 'Porque los coeficientes se dividen (' + a * b + ' ÷ ' + b + ' = ' + a + '); solo los exponentes se restan.',
+        bad: [['Porque los coeficientes también se restan.', 'Si se restaran daría ' + (a * b - b) + '; los números se dividen y los exponentes se restan.'],
+          ['Porque el coeficiente de abajo se ignora.', 'No se ignora: ' + a * b + ' se divide entre ' + b + '.'],
+          ['Porque los coeficientes se multiplican.', 'Al dividir monomios los coeficientes se dividen; multiplicarlos daría ' + a * b * b + '.']] }; },
+    (r) => { const n = r.int(2, 6), N = SUPN(n);
+      return { k: 'd3', q: 'Si <b>x' + N + ' ÷ x' + N + ' = x⁰</b> (con x ≠ 0), ¿por qué x⁰ = 1?', ok: 'Porque algo dividido entre sí mismo da 1, y al restar exponentes queda ' + n + ' − ' + n + ' = 0.',
+        bad: [['Porque x⁰ = 0: no queda ninguna x.', 'Si se cancelan todas las x, el cociente es 1, no 0: x' + N + ' ÷ x' + N + ' es algo dividido entre sí mismo.'],
+          ['Porque x⁰ = x.', 'x¹ = x; con exponente 0 todas las x se cancelaron y queda 1.'],
+          ['Porque el 0 desaparece al dividir.', 'El exponente 0 sale de restar ' + n + ' − ' + n + '; el cociente de algo entre sí mismo es 1.']] }; },
+  ] },
+  exponentes: { hints: ['Escribe cada potencia como una multiplicación repetida de la base.', 'Cuenta cuántas veces aparece la base en total.', 'Producto de potencias de igual base: se suman los exponentes. Potencia de una potencia: se multiplican.'], items: [
+    (r) => { let m, n; do { m = r.int(2, 5); n = r.int(2, 5); } while (m * n === m + n);
+      return { k: 'e1', q: '¿Por qué <b>x' + SUPN(m) + ' · x' + SUPN(n) + ' = x' + SUPN(m + n) + '</b>?', ok: 'Porque se multiplican ' + m + ' letras x y luego ' + n + ' más: en total son ' + m + ' + ' + n + ' = ' + (m + n) + '.',
+        bad: [['Porque los exponentes se multiplican.', 'Multiplicar exponentes aplica a una potencia de potencia, como (x' + SUPN(m) + ')' + SUPN(n) + '; en x' + SUPN(m) + '·x' + SUPN(n) + ' se suman.'],
+          ['Porque así lo dice la regla y no se puede explicar.', 'La regla sí se explica: basta contar las letras x que quedan multiplicadas.'],
+          ['Porque las bases también se multiplican: x·x = 2x.', 'x·x es x², no 2x; la base se queda igual y solo se cuenta cuántas hay.']] }; },
+    (r) => { let m, n; do { m = r.int(2, 5); n = r.int(2, 4); } while (m * n === m + n);
+      return { k: 'e2', q: '¿Por qué <b>(x' + SUPN(m) + ')' + SUPN(n) + ' = x' + SUPN(m * n) + '</b>?', ok: 'Porque son ' + n + ' grupos de x' + SUPN(m) + ', es decir ' + n + ' × ' + m + ' = ' + m * n + ' letras x.',
+        bad: [['Porque los exponentes se suman: ' + m + ' + ' + n + '.', 'Sumar exponentes es para x' + SUPN(m) + '·x' + SUPN(n) + '; aquí el grupo x' + SUPN(m) + ' se repite ' + n + ' veces, así que se multiplican.'],
+          ['Porque la potencia de afuera solo afecta a la x, no al exponente.', 'La potencia afecta a todo x' + SUPN(m) + ': por eso hay ' + n + ' grupos de x' + SUPN(m) + '.'],
+          ['Porque (x' + SUPN(m) + ')' + SUPN(n) + ' = ' + n + 'x' + SUPN(m) + '.', 'Eso sería sumar x' + SUPN(m) + ' ' + n + ' veces; el exponente ' + n + ' indica multiplicarlo ' + n + ' veces.']] }; },
+    (r) => { const m = r.int(2, 4), n = r.int(2, 3), p2 = Math.pow(2, n);
+      return { k: 'e3', q: '¿Por qué <b>(2x' + SUPN(m) + ')' + SUPN(n) + '</b> no es <b>2x' + SUPN(m * n) + '</b>?', ok: 'Porque la potencia afecta a cada factor del paréntesis: también el 2 se eleva, 2' + SUPN(n) + ' = ' + p2 + '. Queda ' + p2 + 'x' + SUPN(m * n) + '.',
+        bad: [['Porque los exponentes se suman, no se multiplican.', 'En una potencia de potencia los exponentes sí se multiplican; el problema es que falta elevar el 2.'],
+          ['Porque el 2 se multiplica por ' + n + '.', 'El 2 no se multiplica por ' + n + ': se eleva a la ' + n + ', 2' + SUPN(n) + ' = ' + p2 + '.'],
+          ['Sí es igual: el número de adelante no cambia.', 'Sí cambia: el 2 está dentro del paréntesis y también se eleva.']] }; },
+  ] },
+  signos: { hints: ['Escribe la potencia como multiplicación repetida del número con su signo.', 'Cuenta cuántos factores negativos hay: si son pares, el resultado es positivo; si son impares, negativo.', 'Fíjate si el signo − está dentro del paréntesis o fuera de él.'], items: [
+    (r) => { const n = 3, b = r.int(2, 4), bn = Math.pow(b, n);
+      return { k: 'g1', q: '¿Por qué <b>(−' + b + ')³ = −' + bn + '</b>?', ok: 'Porque hay 3 factores negativos (cantidad impar), y el resultado conserva el signo −.',
+        bad: [['Porque el exponente siempre vuelve negativo el resultado.', 'Con exponente par el resultado sería positivo; aquí es negativo porque el exponente 3 es impar.'],
+          ['Porque ' + b + '³ = ' + bn + ' y el signo no importa.', 'El signo sí importa: cambia el resultado de +' + bn + ' a −' + bn + '.'],
+          ['Porque (−' + b + ')·3 = −' + 3 * b + '.', 'El exponente 3 no multiplica por 3: repite el factor −' + b + ' tres veces.']] }; },
+    (r) => { const b = r.int(2, 9), b2 = b * b;
+      return { k: 'g2', q: '¿Por qué <b>(−' + b + ')² = ' + b2 + '</b>, pero <b>−' + b + '² = −' + b2 + '</b>?', ok: 'Porque en (−' + b + ')² el exponente afecta al −' + b + ' completo; en −' + b + '² solo afecta al ' + b + ' y el − queda afuera.',
+        bad: [['Porque las dos expresiones son iguales y una está mal escrita.', 'No son iguales: el paréntesis cambia a qué se aplica el exponente.'],
+          ['Porque un número negativo al cuadrado siempre es negativo.', 'Un negativo al cuadrado es positivo: (−' + b + ')(−' + b + ') = ' + b2 + '.'],
+          ['Porque el cuadrado cambia el signo de todo.', 'El cuadrado no cambia signos; en −' + b + '² el − simplemente no está dentro de la potencia.']] }; },
+    (r) => { const n = r.pick([2, 4, 6]);
+      return { k: 'g3', q: '¿Por qué <b>(−1)' + SUPN(n) + ' = 1</b>?', ok: 'Porque los ' + n + ' factores negativos se agrupan en pares, y cada par (−1)(−1) da +1.',
+        bad: [['Porque el exponente par borra el signo.', 'El signo no se borra: se cancela por pares, porque menos por menos da más.'],
+          ['Porque 1 elevado a cualquier número da 1, sin importar el signo.', 'Con exponente impar el resultado sería −1, así que el signo sí importa.'],
+          ['Porque −1 por ' + n + ' da positivo.', 'No se multiplica −1 por el exponente; se multiplica −1 por sí mismo ' + n + ' veces.']] }; },
+  ] },
+  distributiva: { hints: ['Identifica el factor que está fuera del paréntesis.', 'Ese factor multiplica a cada término de adentro, uno por uno.', 'Revisa el signo de cada producto: menos por menos da más.'], items: [
+    (r) => { const a = r.int(2, 9), b = r.int(2, 9);
+      return { k: 'di1', q: 'En <b>' + a + '(x + ' + b + ') = ' + a + 'x + ' + a * b + '</b>, ¿por qué el ' + a + ' también multiplica al ' + b + '?', ok: 'Porque el ' + a + ' multiplica a <b>todo</b> lo que hay dentro del paréntesis, término por término.',
+        bad: [['Porque solo multiplica al primer término.', 'Multiplicar solo el primero daría ' + a + 'x + ' + b + '; falta multiplicar el ' + b + '.'],
+          ['Porque los números siempre se multiplican entre sí.', 'No siempre: aquí el ' + a + ' multiplica al ' + b + ' porque reparte su multiplicación en todo el paréntesis.'],
+          ['Porque el paréntesis indica sumar ' + a + ' a cada término.', 'Un número pegado al paréntesis multiplica, no suma.']] }; },
+    (r) => { const a = r.int(2, 9), b = r.int(2, 9);
+      return { k: 'di2', q: 'En <b>−' + a + '(x − ' + b + ') = −' + a + 'x + ' + a * b + '</b>, ¿por qué el último término es positivo?', ok: 'Porque −' + a + ' multiplica a −' + b + ', y menos por menos da más: (−' + a + ')(−' + b + ') = +' + a * b + '.',
+        bad: [['Porque el último término siempre se vuelve positivo.', 'No siempre: depende de los signos; aquí es positivo porque se multiplican dos negativos.'],
+          ['Porque el − solo afecta al primer término.', 'El −' + a + ' multiplica a los dos términos: por eso x se vuelve −' + a + 'x y −' + b + ' se vuelve +' + a * b + '.'],
+          ['Porque ' + a + ' y ' + b + ' se suman.', 'No se suman: se multiplican, (−' + a + ')(−' + b + ') = ' + a * b + '.']] }; },
+    (r) => { const b = r.int(2, 9);
+      return { k: 'di3', q: 'En <b>x(x + ' + b + ') = x² + ' + b + 'x</b>, ¿por qué aparece x²?', ok: 'Porque la x de afuera multiplica a la x de adentro, y x·x = x².',
+        bad: [['Porque x + x = x².', 'x + x = 2x; x² sale de multiplicar x·x.'],
+          ['Porque el ' + b + ' se convierte en exponente.', 'El ' + b + ' es un coeficiente: x·' + b + ' = ' + b + 'x.'],
+          ['Porque siempre que hay paréntesis aparece un cuadrado.', 'No siempre: aparece porque el factor de afuera es x y multiplica a otra x.']] }; },
+  ] },
+  multPol: { hints: ['Cuenta los términos de cada paréntesis.', 'Cada término del primero multiplica a cada término del segundo.', 'Después de multiplicar, junta los términos semejantes.'], items: [
+    (r) => { const a = r.int(1, 9), b = r.int(1, 9);
+      return { k: 'mp1', q: 'Al multiplicar <b>(x + ' + a + ')(x + ' + b + ')</b>, ¿cuántos productos parciales aparecen?', ok: '4: cada término del primer paréntesis por cada término del segundo.',
+        bad: [['2: x·x y ' + a + '·' + b + '.', 'Eso deja fuera los productos cruzados x·' + b + ' y ' + a + '·x.'],
+          ['3: uno por cada signo.', 'Los signos no determinan los productos; cada término se multiplica por cada uno del otro paréntesis.'],
+          ['1: solo el producto total.', 'El producto total se arma sumando 4 productos parciales.']] }; },
+    (r) => { const a = r.int(1, 9), b = r.int(2, 9), c = r.int(1, 9);
+      return { k: 'mp2', q: '¿Cuántos productos parciales hay en <b>(x + ' + a + ')(x² + ' + b + 'x + ' + c + ')</b>?', ok: '6: los 2 términos del primero por los 3 del segundo, 2 × 3 = 6.',
+        bad: [['5: 2 + 3 términos.', 'Los términos no se suman: cada uno del primero multiplica a cada uno del segundo, 2 × 3.'],
+          ['3: uno por cada término del segundo.', 'Así solo multiplicarías un término del primer paréntesis; el otro también multiplica a los tres.'],
+          ['4: como en todo producto de dos paréntesis.', 'Salen 4 productos con dos binomios; aquí el segundo factor tiene 3 términos.']] }; },
+    (r) => { let a, b; do { a = r.int(2, 7); b = r.int(2, 7); } while (a === b || a * a === a + b);
+      return { k: 'mp3', q: 'En <b>(x + ' + a + ')(x + ' + b + ') = x² + ' + (a + b) + 'x + ' + a * b + '</b>, ¿de dónde sale el ' + (a + b) + 'x?', ok: 'De juntar los productos cruzados ' + b + 'x y ' + a + 'x, que son semejantes.',
+        bad: [['De multiplicar ' + a + ' por ' + b + '.', a + '·' + b + ' = ' + a * b + ' es el último término, no el del medio.'],
+          ['De multiplicar x por x.', 'x·x = x², el primer término.'],
+          ['De elevar ' + a + ' al cuadrado.', a + '² = ' + a * a + '; el término del medio sale de los dos productos cruzados.']] }; },
+  ] },
+  cuadrado: { hints: ['Escribe el cuadrado como multiplicación: (x + a)² = (x + a)(x + a).', 'Multiplica término por término: aparecen dos productos cruzados iguales.', 'En el modelo de áreas, esos productos son los dos rectángulos iguales.'], items: [
+    (r) => { const a = r.int(3, 9);
+      return { k: 'c1', q: '¿Por qué <b>(x + ' + a + ')²</b> no es <b>x² + ' + a * a + '</b>?', ok: 'Porque (x + ' + a + ')(x + ' + a + ') produce también dos productos ' + a + 'x y ' + a + 'x, que forman el término del medio ' + 2 * a + 'x.',
+        bad: [['Porque ' + a + '² = ' + 2 * a + '.', a + '² = ' + a * a + ', no ' + 2 * a + '; el problema de x² + ' + a * a + ' es que falta el término del medio.'],
+          ['Porque el cuadrado solo afecta a la x.', 'El cuadrado afecta a todo el binomio (x + ' + a + '), no solo a la x.'],
+          ['Porque no se puede elevar un binomio al cuadrado.', 'Sí se puede: (x + ' + a + ')² = (x + ' + a + ')(x + ' + a + ').']] }; },
+    (r) => { const a = r.int(3, 9);
+      return { k: 'c2', q: 'En <b>(x + ' + a + ')² = x² + ' + 2 * a + 'x + ' + a * a + '</b>, ¿de dónde sale el ' + 2 * a + 'x?', ok: 'De sumar los dos rectángulos ' + a + 'x + ' + a + 'x del modelo de áreas.',
+        bad: [['De sumar ' + a + ' + ' + a + ' sin la x.', 'Sumar ' + a + ' + ' + a + ' daría ' + 2 * a + ' sin letra; los rectángulos llevan x: ' + a + 'x + ' + a + 'x = ' + 2 * a + 'x.'],
+          ['De elevar ' + a + ' al cuadrado.', a + '² = ' + a * a + ' es el último término, no el ' + 2 * a + 'x.'],
+          ['De multiplicar x por x.', 'x·x = x² es el primer término.']] }; },
+    (r) => { const a = r.int(2, 9);
+      return { k: 'c3', q: '¿Por qué en <b>(x − ' + a + ')²</b> el último término es <b>+' + a * a + '</b> y no −' + a * a + '?', ok: 'Porque (−' + a + ')(−' + a + ') = +' + a * a + ': menos por menos da más.',
+        bad: [['Porque el signo − se pierde al elevar.', 'El signo no se pierde: se multiplica −' + a + ' por −' + a + ' y el producto es positivo.'],
+          ['Porque ' + a * a + ' es mayor que ' + a + '.', 'El tamaño no decide el signo; lo decide multiplicar dos negativos.'],
+          ['Debería ser −' + a * a + ', porque el binomio tiene un −.', 'El − aparece en el término del medio (−' + 2 * a + 'x); el último es (−' + a + ')² = +' + a * a + '.']] }; },
+  ] },
+  conjugados: { hints: ['Multiplica término por término los dos paréntesis.', 'Fíjate en los dos productos cruzados: tienen signos contrarios.', 'Los términos opuestos se cancelan; solo quedan el primer y el último producto.'], items: [
+    (r) => { const a = r.int(2, 9);
+      return { k: 'cj1', q: '¿Por qué <b>(x + ' + a + ')(x − ' + a + ') = x² − ' + a * a + '</b> no tiene término con x?', ok: 'Porque los productos cruzados −' + a + 'x y +' + a + 'x se cancelan.',
+        bad: [['Porque ' + a + ' − ' + a + ' = 0 antes de multiplicar.', 'No se resta ' + a + ' − ' + a + ': los paréntesis se multiplican término por término.'],
+          ['Porque la x desaparece al multiplicar.', 'La x no desaparece: sigue en x²; lo que se cancela es el término del medio.'],
+          ['Porque solo se multiplican los primeros términos.', 'Se multiplican todos los términos, y por eso aparecen −' + a + 'x y +' + a + 'x.']] }; },
+    (r) => { const a = r.int(2, 9);
+      return { k: 'cj2', q: 'En <b>(x + ' + a + ')(x − ' + a + ')</b>, ¿por qué el último término es <b>−' + a * a + '</b>?', ok: 'Porque se multiplica +' + a + ' por −' + a + ', y más por menos da menos.',
+        bad: [['Porque ' + a + ' − ' + a + ' = 0 y luego se resta ' + a * a + '.', 'No se resta ' + a + ' − ' + a + '; se multiplica (+' + a + ')(−' + a + ') = −' + a * a + '.'],
+          ['Porque un cuadrado siempre es negativo.', a + '² es positivo; el − viene de multiplicar un número positivo por uno negativo.'],
+          ['Porque x² es positivo y debe compensarse.', 'Nada se compensa: cada término sale de un producto concreto.']] }; },
+    (r) => { const a = r.int(3, 9);
+      return { k: 'cj3', q: '¿Por qué <b>(x + ' + a + ')(x + ' + a + ')</b> no da <b>x² − ' + a * a + '</b>?', ok: 'Porque no son conjugados: los dos tienen +' + a + ', así que los productos cruzados se suman (' + 2 * a + 'x) en lugar de cancelarse.',
+        bad: [['Sí da x² − ' + a * a + ': es la regla de los conjugados.', 'Los conjugados necesitan signos contrarios, (x + ' + a + ')(x − ' + a + '); aquí los dos son +.'],
+          ['Porque ' + a + ' por ' + a + ' da ' + 2 * a + '.', a + '·' + a + ' = ' + a * a + '; el problema es que el término del medio no se cancela.'],
+          ['Porque falta elevar la x.', 'La x sí queda al cuadrado; lo que falla es el término del medio y el signo del último.']] }; },
+  ] },
+  cubo: { hints: ['Escribe el cubo como tres factores: (x + a)(x + a)(x + a).', 'Multiplica dos factores y luego el resultado por el tercero; cuenta los productos intermedios.', 'Compara con la fórmula (a + b)³ = a³ + 3a²b + 3ab² + b³.'], items: [
+    (r) => { const a = r.int(2, 3);
+      return { k: 'cu1', q: '¿Por qué <b>(x + ' + a + ')³</b> no es <b>x³ + ' + a * a * a + '</b>?', ok: 'Porque al multiplicar tres veces aparecen otros productos intermedios (' + 3 * a + 'x² y ' + 3 * a * a + 'x).',
+        bad: [['Porque ' + a + '³ = ' + 3 * a + '.', a + '³ = ' + a * a * a + ', no ' + 3 * a + '; el error de x³ + ' + a * a * a + ' es olvidar los productos intermedios.'],
+          ['Porque el cubo solo afecta a la x.', 'El cubo afecta a todo el binomio (x + ' + a + '), no solo a la x.'],
+          ['Porque un binomio no se puede elevar al cubo.', 'Sí se puede: (x + ' + a + ')³ = (x + ' + a + ')(x + ' + a + ')(x + ' + a + ').']] }; },
+    (r) => { const a = r.int(2, 4);
+      return { k: 'cu2', q: 'En <b>(x + ' + a + ')³ = x³ + ' + 3 * a + 'x² + ' + 3 * a * a + 'x + ' + a * a * a + '</b>, ¿de dónde sale el ' + 3 * a + 'x²?', ok: 'Del término 3a²b de la fórmula: 3·x²·' + a + ' = ' + 3 * a + 'x².',
+        bad: [['De elevar ' + a + ' al cubo.', a + '³ = ' + a * a * a + ' es el último término.'],
+          ['De multiplicar x por 3.', 'Si fuera x·3 no llevaría x²; viene de 3·x²·' + a + '.'],
+          ['Del término del medio de (x + ' + a + ')².', 'El término del medio de (x + ' + a + ')² es ' + 2 * a + 'x; el ' + 3 * a + 'x² aparece al multiplicar por el tercer factor y juntar semejantes.']] }; },
+    (r) => { const a = r.int(2, 4);
+      return { k: 'cu3', q: '¿Cuántos términos tiene <b>(x + ' + a + ')³</b> desarrollado y reducido?', ok: '4: x³, ' + 3 * a + 'x², ' + 3 * a * a + 'x y ' + a * a * a + '.',
+        bad: [['2: x³ y ' + a * a * a + '.', 'Faltan los productos intermedios ' + 3 * a + 'x² y ' + 3 * a * a + 'x.'],
+          ['3: como el binomio al cuadrado.', 'El binomio al cuadrado tiene 3; al cubo quedan 4.'],
+          ['8: uno por cada producto parcial.', 'Hay 8 productos parciales, pero varios son semejantes y se juntan: quedan 4 términos.']] }; },
+  ] },
+  factorComun: { hints: ['Factorizar es hacer la distributiva al revés.', 'Para comprobar, multiplica el factor de afuera por cada término de adentro.', 'El factor común lleva el mayor número que divide a todos y cada letra común con su menor exponente.'], items: [
+    (r) => { const a = r.int(2, 6), b = r.int(2, 9);
+      return { k: 'f1', q: '¿Cómo compruebas que <b>' + a + 'x(x + ' + b + ')</b> es la factorización correcta de <b>' + a + 'x² + ' + a * b + 'x</b>?', ok: 'Multiplicando de regreso: ' + a + 'x·x + ' + a + 'x·' + b + ' debe dar ' + a + 'x² + ' + a * b + 'x.',
+        bad: [['Sumando ' + a + 'x + x + ' + b + '.', 'Sumar los factores no regresa al polinomio; se comprueba multiplicando.'],
+          ['Dividiendo ' + a + 'x² + ' + a * b + 'x entre ' + a * b + '.', 'Dividir entre ' + a * b + ' no comprueba nada: cambiaría el polinomio.'],
+          ['No hay forma de comprobarlo.', 'Sí la hay: multiplicar de regreso debe dar el polinomio original.']] }; },
+    (r) => { const a = r.int(2, 9);
+      return { k: 'f2', q: '¿Por qué <b>' + a + 'x + ' + a + '</b> se factoriza como <b>' + a + '(x + 1)</b> y no como ' + a + '(x)?', ok: 'Porque ' + a + ' ÷ ' + a + ' = 1: ese 1 debe quedar dentro del paréntesis para recuperar el ' + a + ' al multiplicar.',
+        bad: [['Porque el 1 se agrega para que el paréntesis tenga dos términos.', 'No es por estética: sin el 1, ' + a + '(x) da ' + a + 'x y se pierde el ' + a + '.'],
+          ['Porque ' + a + ' − ' + a + ' = 1.', a + ' − ' + a + ' = 0; el 1 sale de dividir ' + a + ' ÷ ' + a + '.'],
+          ['Da lo mismo escribir ' + a + '(x).', a + '(x) = ' + a + 'x; le falta el término ' + a + '.']] }; },
+    (r) => { const a = r.int(2, 9), b = r.int(2, 9);
+      return { k: 'f3', q: '¿Por qué el factor común de <b>' + a + 'x³ + ' + b + 'x²</b> lleva <b>x²</b> y no x³?', ok: 'Porque cada letra se toma con su menor exponente: x² está en los dos términos y x³ no.',
+        bad: [['Porque se toma el mayor exponente.', 'Con el mayor, x³ no dividiría a ' + b + 'x²; se toma el menor.'],
+          ['Porque 3 − 1 = 2.', 'No se resta nada: x² es el menor exponente que aparece.'],
+          ['Porque x² es más fácil de escribir.', 'Se elige porque divide a los dos términos, no por comodidad.']] }; },
+  ] },
+  difCuadrados: { hints: ['Revisa el signo que une los dos términos.', 'Comprueba que los dos términos sean cuadrados perfectos.', 'La fórmula a² − b² = (a + b)(a − b) solo sirve para una resta; puedes comprobar multiplicando.'], items: [
+    (r) => { const a = r.int(2, 9);
+      return { k: 'dc1', q: '¿Por qué <b>x² + ' + a * a + '</b> no se factoriza como diferencia de cuadrados?', ok: 'Porque es una suma: sus factores conjugados darían x² − ' + a * a + ', no x² + ' + a * a + '.',
+        bad: [['Porque ' + a * a + ' no es un cuadrado perfecto.', a * a + ' = ' + a + '², sí es cuadrado perfecto; el problema es el signo +.'],
+          ['Porque tiene demasiados términos.', 'Tiene dos términos, como cualquier diferencia de cuadrados.'],
+          ['Porque la x está al cuadrado.', 'Que la x esté al cuadrado es justo lo que se necesita; lo que falla es que es una suma.']] }; },
+    (r) => { const a = r.int(2, 9);
+      return { k: 'dc2', q: '¿Por qué <b>' + a * a + ' − x²</b> sí es una diferencia de cuadrados?', ok: 'Porque es una resta de dos cuadrados perfectos, ' + a * a + ' = ' + a + '² y x²; se factoriza como (' + a + ' + x)(' + a + ' − x).',
+        bad: [['No lo es, porque la x debe ir primero.', 'El orden no importa: es a² − b² con a = ' + a + ' y b = x.'],
+          ['Porque los dos términos tienen x.', a * a + ' no tiene x; lo que importa es que ambos sean cuadrados y estén restando.'],
+          ['Porque cualquier resta de dos términos se factoriza así.', 'Solo funciona si los dos son cuadrados perfectos; x² − ' + (a * a + 1) + ' no se factoriza así con enteros.']] }; },
+    (r) => { const a = r.int(2, 9);
+      return { k: 'dc3', q: 'En <b>x² − ' + a * a + ' = (x + ' + a + ')(x − ' + a + ')</b>, ¿por qué un factor lleva + y el otro −?', ok: 'Porque así los productos cruzados +' + a + 'x y −' + a + 'x se cancelan y solo queda x² − ' + a * a + '.',
+        bad: [['Por costumbre; podrían ir los dos con −.', '(x − ' + a + ')(x − ' + a + ') = x² − ' + 2 * a + 'x + ' + a * a + ': no da la diferencia de cuadrados.'],
+          ['Porque el + y el − se suman y dan cero.', 'Los signos no se suman; lo que se cancela son los productos cruzados al multiplicar.'],
+          ['Para que el último término sea +' + a * a + '.', '(+' + a + ')(−' + a + ') da −' + a * a + ', justo el signo de la diferencia.']] }; },
+  ] },
+  trinomio1: { hints: ['Multiplica (x + m)(x + n) y observa qué queda en el medio y al final.', 'El término independiente sale de m·n y el coeficiente de x sale de m + n.', 'Prueba pares de números que multipliquen el término independiente y revisa su suma; observa también los signos.'], items: [
+    (r) => { const m = r.int(1, 6), n = r.pick([1, 2, 3, 4, 5, 6, 7].filter((x) => x !== m));
+      return { k: 't1', q: 'Al factorizar <b>x² + ' + (m + n) + 'x + ' + m * n + '</b> buscamos dos números. ¿Qué deben cumplir?', ok: 'Multiplicados dan ' + m * n + ' y sumados dan ' + (m + n) + '.',
+        bad: [['Sumados dan ' + m * n + ' y multiplicados dan ' + (m + n) + '.', 'Está al revés: el producto debe dar el término independiente (' + m * n + ') y la suma, el coeficiente de x (' + (m + n) + ').'],
+          ['Multiplicados dan ' + (m + n) + ' y restados dan ' + m * n + '.', 'No se restan: se piden producto ' + m * n + ' y suma ' + (m + n) + '.'],
+          ['Deben ser los dos iguales.', 'No tienen que ser iguales (aquí son ' + Math.min(m, n) + ' y ' + Math.max(m, n) + ').']] }; },
+    (r) => { const m = r.int(2, 6), n = r.pick([2, 3, 4, 5, 6].filter((x) => x !== m)), P = m * n;
+      const pairs = []; for (let p = 1; p * p <= P; p++) if (P % p === 0 && p !== Math.min(m, n)) pairs.push([p, P / p]);
+      const nonOne = pairs.filter((q) => q[0] > 1); const [p, q] = nonOne.length ? r.pick(nonOne) : pairs[0];
+      return { k: 't2', q: 'En <b>x² + ' + (m + n) + 'x + ' + P + '</b>, ¿por qué sirven ' + Math.min(m, n) + ' y ' + Math.max(m, n) + ', pero no ' + p + ' y ' + q + ', aunque ' + p + '·' + q + ' = ' + P + '?', ok: 'Porque ' + p + ' + ' + q + ' = ' + (p + q) + ', no ' + (m + n) + ': deben cumplir el producto y la suma a la vez.',
+        bad: [['Porque ' + p + ' y ' + q + ' son demasiado grandes.', 'El tamaño no importa; lo que falla es que su suma no es ' + (m + n) + '.'],
+          ['Sí sirven: basta con que el producto dé ' + P + '.', 'También deben sumar ' + (m + n) + ', y ' + p + ' + ' + q + ' = ' + (p + q) + '.'],
+          ['Porque los dos números deben ser consecutivos.', 'No tienen que ser consecutivos; deben multiplicar ' + P + ' y sumar ' + (m + n) + '.']] }; },
+    (r) => { const m = r.int(1, 6), n = r.pick([1, 2, 3, 4, 5, 6, 7].filter((x) => x !== m));
+      return { k: 't3', q: 'En <b>x² − ' + (m + n) + 'x + ' + m * n + '</b>, ¿por qué los dos números buscados son negativos?', ok: 'Porque su producto es positivo (+' + m * n + '), así que tienen el mismo signo, y su suma es negativa (−' + (m + n) + '), así que los dos son negativos.',
+        bad: [['Porque el trinomio tiene un signo −.', 'No basta con ver un −: hay que revisar el signo del producto (+' + m * n + ') y el de la suma (−' + (m + n) + ').'],
+          ['Porque uno es positivo y el otro negativo.', 'Con signos distintos el producto sería negativo, pero aquí es +' + m * n + '.'],
+          ['Porque en una factorización los números siempre son negativos.', 'No siempre: en x² + ' + (m + n) + 'x + ' + m * n + ' los dos son positivos.']] }; },
+  ] },
+  cubos: { hints: ['Revisa que los dos términos sean cubos perfectos.', 'Recuerda el patrón: el binomio conserva el signo original y el término del medio del trinomio lleva el signo contrario.', 'Comprueba multiplicando el binomio por cada término del trinomio: los productos intermedios se cancelan.'], items: [
+    (r) => { const a = r.int(2, 4);
+      return { k: 'cb1', q: '¿Cómo puedes comprobar que <b>(x + ' + a + ')(x² − ' + a + 'x + ' + a * a + ') = x³ + ' + a * a * a + '</b>?', ok: 'Multiplicando: los términos intermedios se cancelan y quedan x³ y ' + a * a * a + '.',
+        bad: [['Sumando ' + a + ' + ' + a + ' + ' + a * a + '.', 'Sumar los números no comprueba nada; se comprueba multiplicando.'],
+          ['Elevando (x + ' + a + ') al cuadrado.', 'Elevar al cuadrado es otra operación; hay que multiplicar los dos factores dados.'],
+          ['Restando x³ − ' + a * a * a + '.', 'Restar no verifica la igualdad; hay que multiplicar y ver si sale x³ + ' + a * a * a + '.']] }; },
+    (r) => { const a = r.int(2, 4);
+      return { k: 'cb2', q: 'En <b>x³ − ' + a * a * a + ' = (x − ' + a + ')(x² + ' + a + 'x + ' + a * a + ')</b>, ¿por qué el trinomio lleva +' + a + 'x?', ok: 'Porque el término del medio del trinomio lleva el signo contrario al del binomio; así los productos intermedios se cancelan.',
+        bad: [['Porque todos los signos del trinomio son siempre +.', 'No siempre: en la suma de cubos el trinomio lleva −' + a + 'x.'],
+          ['Porque copia el signo del binomio.', 'El binomio tiene −; el término del medio del trinomio lleva el signo contrario.'],
+          ['Porque ' + a + 'x es positivo por ser un producto.', 'El signo no depende de eso; se elige para que se cancelen los productos intermedios.']] }; },
+    (r) => { const a = r.int(2, 4);
+      return { k: 'cb3', q: '¿Por qué <b>x³ + ' + a * a * a + '</b> se puede factorizar como suma de cubos?', ok: 'Porque los dos términos son cubos perfectos: x³ y ' + a * a * a + ' = ' + a + '³.',
+        bad: [['Porque tiene dos términos, sin importar cuáles.', 'No basta con dos términos: x³ + ' + (a * a * a + 1) + ' no es suma de cubos, porque ' + (a * a * a + 1) + ' no es un cubo perfecto.'],
+          ['Porque los dos son cuadrados perfectos.', 'Para la suma de cubos se necesitan cubos perfectos; x³ no es un cuadrado perfecto.'],
+          ['Porque toda suma de dos términos se factoriza.', 'x² + ' + a * a + ' es una suma y no se factoriza con enteros; aquí funciona porque son cubos.']] }; },
+  ] },
 };
+
 function g_comprende(r, lvl, opts) {
   const sk = (opts && opts.skill) || 'cuadrado';
-  const list = WHY[sk] || WHY.cuadrado;
-  const it = r.pick(list);
-  const options = r.shuffle([{ h: it.ok, ok: true }].concat(it.bad.map((h) => ({ h, ok: false, fb: 'Piénsalo de nuevo: ' + it.ok, tag: 'otro' }))));
-  return P({ kind: 'choice', dim: 'comprende', instr: 'Piensa en el porqué.', expr: '<div class="why">' + it.q + '</div>', options: options.map((o) => ({ ...o, h: esc2(o.h).replace(/&lt;b>/g, '<b>').replace(/&lt;\/b>/g, '</b>') })),
-    hints: ['Recuerda de dónde sale cada término.', 'Piensa en el modelo de áreas o en abrir los paréntesis con calma.', 'Descarta las opciones que no explican el procedimiento.'],
+  const bank = WHY[sk] || WHY.cuadrado;
+  const it = r.pick(bank.items)(r);
+  const fmt = (h) => esc2(h).replace(/&lt;b>/g, '<b>').replace(/&lt;\/b>/g, '</b>');
+  const options = r.shuffle([{ h: it.ok, ok: true }].concat(it.bad.map(([h, why]) => ({ h, ok: false, fb: why, tag: 'otro' }))));
+  return P({ kind: 'choice', dim: 'comprende', instr: 'Piensa en el porqué.', expr: '<div class="why">' + it.q + '</div>', options: options.map((o) => ({ ...o, h: fmt(o.h) })),
+    hints: bank.hints, vkey: 'comprende:' + sk + ':' + it.k,
     solution: [it.ok], answer: it.ok, fallbackTag: 'otro', fallback: 'Piensa en por qué funciona, no solo en qué hacer. ' + it.ok });
 }
 
@@ -2990,7 +3289,7 @@ function whyNot(p, chosen) {
   all.forEach((o, i) => {
     if (o.ok) return;
     // En traducción de frases cada opción trae su explicación específica; se usa antes que la heurística general.
-    let t = ((p.gen === 'lenguaje' || p.gen === 'graficar' || p.gen === 'conceptoEc' || p.gen === 'sistemaGrafico') && o.fb) ? o.fb : _nbGen(p, o, all);
+    let t = ((p.gen === 'lenguaje' || p.gen === 'graficar' || p.gen === 'conceptoEc' || p.gen === 'sistemaGrafico' || p.gen === 'comprende') && o.fb) ? o.fb : _nbGen(p, o, all);
     if (!t && o.fb) t = String(o.fb).replace(/^(No|Sí):\s*/, '').replace(/^Piénsalo de nuevo:.*$/, '');
     if (!t) t = 'No cumple lo que pide la pregunta; compárala con la respuesta correcta.';
     const label = p.gen === 'comprende' ? '«' + fx(o.h) + '»' : fx(o.h);
@@ -2999,13 +3298,28 @@ function whyNot(p, chosen) {
   return rows.length ? '<div class="why nb"><b>¿Por qué las otras no?</b><ul class="steps">' + rows.join('') + '</ul></div>' : '';
 }
 function okFb(p, r, st, q, lesson) {
-  const xp = q === 1 ? (st.similar ? 5 : 10) : 5, rule = RULES[p.gen];
+  const xp = q === 1 ? (st.similar ? 5 : 10) : 5, rule = p.rule || RULES[p.gen];
   const steps = (p.solution || []).slice(0, 4).map((s) => '<li>' + fx(s) + '</li>').join('');
   return jfb(q === 1 ? 'festejo' : 'alivio', 'ok', '<b>✅ Correcto</b>' + (st.wrong || st.hints ? '<div class="mute">Ahora sí lo lograste.</div>' : '')
     + '<div class="why"><b>¿Por qué?</b> ' + (rule ? fx(rule) : '') + '</div>' + (lesson ? whyNot(p) : '') + (steps ? '<ol class="steps">' + steps + '</ol>' : '')
     + (r.verify ? '<div>Comprobamos: ' + r.verify + '</div>' : '') + '<div class="mute">+' + xp + ' XP</div>');
 }
 // ---------- Ejercicio ----------
+// Variedad: evita repetir en una sesión corta la misma pregunta (misma plantilla en lenguaje/porqué, mismo enunciado en el resto).
+const RECENT = [];
+function probSig(gen, level, seed, opts) { const pp = Gen.makeProblem(gen, level, seed, opts || {}); return pp.vkey || (gen + '|' + pp.instr + '|' + pp.expr); }
+function freshSeed(gen, level, opts) {
+  // Prueba varias semillas; se queda con una no usada recientemente o, si todas lo fueron, con la usada hace más tiempo.
+  let best = null, bestAge = -2;
+  for (let k = 0; k < 16; k++) {
+    const sd = rnd() % 100000000 + 1, sig = probSig(gen, level, sd, opts), last = RECENT.lastIndexOf(sig);
+    const age = last < 0 ? Infinity : RECENT.length - last;
+    if (age > bestAge) { best = { sd, sig }; bestAge = age; }
+    if (age === Infinity) break;
+  }
+  RECENT.push(best.sig); if (RECENT.length > 30) RECENT.shift();
+  return best.sd;
+}
 function mountEx(root, spec, cfg) {
   cfg = cfg || {}; const mode = cfg.mode || 'learn';
   let p, st, lastInput = null;
@@ -3198,7 +3512,11 @@ function mountEx(root, spec, cfg) {
       st.vid = true; if (!cfg.readOnly) { S.videos[v.youtubeId] = (S.videos[v.youtubeId] || 0) + 1; skObj(p.skill).vp = Math.min(0.3, (skObj(p.skill).vp || 0) + 0.15); } record(0); if (!cfg.readOnly) save();
       root.querySelector('#vid').innerHTML = '<div class="video"><p><b>' + esc(v.title) + '</b></p>' + videoEmbed(v) + '<p class="mute">Si no carga (sin internet), usa las pistas o la solución.</p></div>';
       acts();
-    } else if (a === 'similar') { init(spec.seed + 7919 + rnd() % 1000, true); draw(); }
+    } else if (a === 'similar') {
+      const cur = p.vkey || (p.gen + '|' + p.instr + '|' + p.expr); let sd = spec.seed + 7919 + rnd() % 1000;
+      for (let k = 0; k < 10 && probSig(spec.gen, spec.level, sd, spec.opts) === cur; k++) sd += 7919 + rnd() % 1000;
+      init(sd, true); draw();
+    }
     else if (a === 'cont') { if (cfg.onDone) cfg.onDone(st.res || record(1)); }
   });
   init(spec.seed, false); draw();
@@ -3238,7 +3556,7 @@ VIEWS.welcome = function (app) {
   }
   let h = sky + obTop(step);
   if (step === 1) {
-    h += obAsk('cuerpo', '¡Hola! ¿Cómo te llamo?')
+    h += obAsk('cuerpo', '¡Hola! ¿Cómo te llamas?')
       + '<div class="card"><label class="lbl" for="nm">TU NOMBRE O APODO</label><input id="nm" class="txt" placeholder="Por ejemplo: Sofi" maxlength="24" autocomplete="off" value="' + esc(OB.name) + '">'
       + '<div class="mute" style="font-size:.85rem">Con tu nombre de pila o un apodo basta. No necesitamos apellidos.</div>'
       + '<label class="okrow"><input type="checkbox" id="ok"' + (OB.ok ? ' checked' : '') + '><span>Leí y acepto el <a href="#" data-act="aviso">aviso de privacidad y uso</a>.</span></label></div>'
@@ -3367,7 +3685,7 @@ VIEWS.run = function (app) {
     $('#go').onclick = next;
     $('#vbtn').onclick = () => { $('#vslot').innerHTML = '<div class="video">' + videoEmbed(v) + '</div><button class="btn primary" id="go2">YA LO VI · CONTINUAR</button>'; $('#go2').onclick = next; };
   } else if (s.t === 'gen') {
-    if (s.__seed == null) s.__seed = rnd() % 100000000 + 1; // semilla estable: al repasar, se ve el mismo ejercicio
+    if (s.__seed == null) s.__seed = freshSeed(s.gen, s.level, s.opts); // semilla estable: al repasar, se ve el mismo ejercicio
     mountEx(box, { gen: s.gen, level: s.level, opts: s.opts, seed: s.__seed }, {
       mode: 'learn', lesson: R.kind === 'lesson', video: R.kind === 'lesson' ? lessonVideo(R.id) : null, readOnly: reviewMode,
       onResult: (r) => { if (reviewMode) return; if (!r.similar) { R.stats.total++; R.stats.q += r.q; if (r.q === 1) R.stats.first++; } if (R.onResult) R.onResult(r); },
