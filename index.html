@@ -577,12 +577,13 @@ function fmtStr(p) {
 // Texto → HTML (superíndices y fracciones ⟦n|d⟧)
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function M(str) {
-  let s = esc(str);
+  // Notación natural: el guion de teclado se muestra como signo menos tipográfico.
+  let s = esc(str).replace(/-/g, '−');
   let guard = 0;
   while (/⟦[^⟦⟧|]*\|[^⟦⟧]*⟧/.test(s) && guard++ < 8) {
     s = s.replace(/⟦([^⟦⟧|]*)\|([^⟦⟧]*)⟧/g, '<span class="fr"><span class="n">$1</span><span class="d">$2</span></span>');
   }
-  s = s.replace(/\^\((-?\d+)\)/g, '<sup>$1</sup>').replace(/\^(-?\d+)/g, '<sup>$1</sup>');
+  s = s.replace(/\^\(([-−]?\d+)\)/g, '<sup>$1</sup>').replace(/\^([-−]?\d+)/g, '<sup>$1</sup>');
   return '<span class="m">' + s + '</span>';
 }
 const MP = (p) => M(fmtStr(p));
@@ -845,7 +846,7 @@ __M["gen"]=function(module,exports){var require=__req;
    Cada generador es una función pura de (rng, nivel, opciones).
    ============================================================ */
 'use strict';
-const { RNG, Fr, Poly, fmtStr, M, MP, gcd, MINUS, canFactorMore } = require('./core.js');
+const { RNG, Fr, Poly, fmtStr, M, MP, gcd, MINUS, canFactorMore, evalNum } = require('./core.js');
 const CK = require('./check.js');
 
 // ---------- utilidades ----------
@@ -897,7 +898,8 @@ function grouped(terms) {
   });
   const parts = arr.map((g) => (g.length > 1 ? '(' + fmtList(g) + ')' : fmtList(g)));
   const sums = arr.map((g) => Poly.sum(g));
-  return { grouped: parts.join(' + ').replace(/\+ \(/g, '+ ('), sumTxt: fs(Poly.sum(terms)), groups: arr.map((g) => fmtList(g)), sums };
+  const joined = parts.map((pt, i) => (i === 0 ? pt : pt.charAt(0) === MINUS ? ' ' + MINUS + ' ' + pt.slice(1).trim() : ' + ' + pt)).join('');
+  return { grouped: joined, sumTxt: fs(Poly.sum(terms)), groups: arr.map((g) => fmtList(g)), sums };
 }
 function stepRow(txt) { return txt; }
 
@@ -1053,8 +1055,8 @@ function g_partes(r, lvl) {
   }
   if (kind === 'lit') {
     const opts = withOptions(r, [{ h: useTwo ? lit : M(v + '^' + e1) }], useTwo
-      ? [{ h: M(String(c) + va + vb) }, { h: M(va + vb) }, { h: M(va + '^' + e2 + vb + '^' + e1) }, { h: M(String(Math.abs(c)) + va + '^' + e1) }]
-      : [{ h: M(String(c) + v) }, { h: M(String(c)) }, { h: M(v) }, { h: M(v + '^' + (e1 + 1)) }], 4);
+      ? [{ h: M(fs(Mo(c, { [va]: 1, [vb]: 1 }))) }, { h: M(va + vb) }, { h: M(fs(Mo(1, { [va]: e2, [vb]: e1 }))) }, { h: M(fs(Mo(Math.abs(c), { [va]: e1 }))) }]
+      : [{ h: M(fs(Mo(c, { [v]: 1 }))) }, { h: M(String(c)) }, { h: M(v) }, { h: M(v + '^' + (e1 + 1)) }], 4);
     return P({ kind: 'choice', dim: 'reconoce', instr: '¿Cuál es la <b>parte literal</b> de este término?', expr: M(ts), options: opts,
       hints: ['La parte literal son las letras, con sus exponentes.', 'No incluye el coeficiente (el número).', 'Tacha el número: lo que queda es la parte literal.'],
       solution: ['La parte literal son las letras con sus exponentes: ' + (useTwo ? lit : M(v + '^' + e1)) + '.'], answer: useTwo ? lit : M(v + '^' + e1), fallbackTag: 'otro', fallback: 'La parte literal son solo las letras con sus exponentes, sin el número.' });
@@ -1067,12 +1069,27 @@ function g_partes(r, lvl) {
       solution: ['El exponente de ' + target + ' es ' + ex + ': ' + M(target + '^' + ex + ' = ' + Array(ex).fill(target).join('·')) + '.'], answer: M(String(ex)), fallbackTag: 'exponentes', fallback: 'El exponente es el número pequeño arriba de la letra.' });
   }
   if (kind === 'grade') {
-    const g = e1 + e2;
-    const opts = withOptions(r, [{ h: String(g) }], [{ h: String(e1) }, { h: String(e2) }, { h: String(e1 * e2) }, { h: String(g + 1) }, { h: String(c) }], 4);
+    // El grado se calcula SIEMPRE con los exponentes reales del término generado (no con e1/e2 auxiliares).
+    const ent = Object.entries(term.terms()[0].e).filter(([, e]) => e > 0).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    const exps = ent.map(([, e]) => e), g = exps.reduce((sum, e) => sum + e, 0);
+    const absC = Math.abs(c), one = ent.length === 1;
+    const wrong = one
+      ? [{ h: String(g + 1) }, { h: String(g - 1), fb: 'Cuenta bien el exponente de la letra.' }, { h: String(absC), fb: 'El coeficiente no cuenta para calcular el grado.' }, { h: String(g * 2), fb: 'El grado es el exponente de la letra; no se duplica.' }, { h: String(g + 2) }]
+      : [{ h: String(exps[0]), fb: 'Ese es solo el exponente de ' + ent[0][0] + '; también cuenta el de ' + ent[1][0] + '.' }, { h: String(exps[1]), fb: 'Ese es solo el exponente de ' + ent[1][0] + '; también cuenta el de ' + ent[0][0] + '.' },
+         { h: String(exps.reduce((p, e) => p * e, 1)), fb: 'Los exponentes se suman, no se multiplican.' }, { h: String(g + 1) }, { h: String(absC), fb: 'El coeficiente no cuenta para calcular el grado.' }, { h: String(g - 1) }];
+    const opts = withOptions(r, [{ h: String(g) }], wrong.filter((x) => +x.h > 0), 4);
+    const expDesc = ent.map(([vv, e]) => 'la ' + vv + ' tiene exponente ' + e + (e === 1 ? ' (cuando no se escribe, es 1)' : '')).join(' y ');
+    const sumTxt = exps.join(' + ') + ' = ' + g;
+    const hints = one
+      ? ['El grado de un término se calcula con los exponentes de sus letras; el coeficiente no cuenta.', 'Este término tiene una sola letra: ' + ent[0][0] + '.', 'Mira el exponente de ' + ent[0][0] + '.']
+      : ['El grado de un término se calcula con los exponentes de sus letras; el coeficiente no cuenta.', 'Suma los exponentes de todas las letras.', 'Suma ' + exps.join(' + ') + '.'];
+    const solution = one
+      ? ['El grado de este término es ' + g + ', porque ' + expDesc + '.', (absC === 1 ? 'El coeficiente no cuenta para calcular el grado.' : 'El coeficiente ' + c + ' no cuenta para calcular el grado.')]
+      : ['El grado de un término es la suma de los exponentes de sus variables: ' + expDesc + '.', sumTxt + '.'];
     return P({ kind: 'choice', dim: 'resuelve', instr: '¿Cuál es el <b>grado</b> de este término?', expr: M(ts), options: opts.map((o) => ({ ...o, h: M(o.h) })),
-      hints: ['El grado de un término se calcula con sus exponentes.', 'Suma todos los exponentes de las letras.', 'Suma ' + e1 + ' + ' + e2 + '.'],
-      solution: ['Sumamos los exponentes de las letras: ' + e1 + ' + ' + e2 + ' = ' + g + '.'], answer: M(String(g)), fallbackTag: 'exponentes', fallback: 'El grado de un término es la suma de los exponentes de sus letras.' });
+      hints, solution, answer: M(String(g)), fallbackTag: 'exponentes', fallback: 'El grado de un término es la suma de los exponentes de sus letras; el coeficiente no cuenta.' });
   }
+
   if (kind === 'const') {
     const a = r.int(2, 9), b = r.int(2, 9), q = r.int(2, 30);
     const list = r.shuffle([Mo(a, { [v]: 2 }), Mo(b, { [v]: 1 }), K(q), Mo(1, { [v]: 3 })].slice(0, 4));
@@ -1093,18 +1110,20 @@ function g_partes(r, lvl) {
 
 function g_lenguaje(r, lvl) {
   const v = pickVar(r); const w = v === 'y' ? 'x' : 'y';
+  const m_ = MINUS;
+  // Cada distractor lleva su propia explicación: por qué NO representa la frase.
   const T = [
-    ['El doble de ' + v + ', más 5', '2' + v + ' + 5', ['2' + v + ' ' + MINUS + ' 5', v + '^2 + 5', '2(' + v + ' + 5)', v + ' + 10']],
-    ['El triple de ' + v + ', menos 4', '3' + v + ' ' + MINUS + ' 4', ['3' + v + ' + 4', '3(' + v + ' ' + MINUS + ' 4)', '4 ' + MINUS + ' 3' + v, v + '^3 ' + MINUS + ' 4']],
-    [v + ' aumentado en 7', v + ' + 7', [v + ' ' + MINUS + ' 7', '7' + v, v + '^7', '7 ' + MINUS + ' ' + v]],
-    ['El cuadrado de ' + v, v + '^2', ['2' + v, v + '^3', v + ' + 2', '2^' + v]],
-    ['El producto de ' + v + ' y ' + w, v + w, [v + ' + ' + w, v + '^2' + w, v + ' ' + MINUS + ' ' + w, '2' + v + w]],
-    ['La suma de ' + v + ' y el doble de ' + w, v + ' + 2' + w, ['2' + v + ' + ' + w, '2(' + v + ' + ' + w + ')', v + w + ' + 2', v + ' + ' + w + '^2']],
-    ['El cubo de ' + v + ', disminuido en 1', v + '^3 ' + MINUS + ' 1', [v + '^2 ' + MINUS + ' 1', '3' + v + ' ' + MINUS + ' 1', '(' + v + ' ' + MINUS + ' 1)^3', '1 ' + MINUS + ' ' + v + '^3']],
-    ['Cinco veces ' + v + ', menos ' + w, '5' + v + ' ' + MINUS + ' ' + w, ['5 + ' + v + ' ' + MINUS + ' ' + w, v + '^5 ' + MINUS + ' ' + w, '5(' + v + ' ' + MINUS + ' ' + w + ')', w + ' ' + MINUS + ' 5' + v]],
+    ['El doble de ' + v + ', más 5', '2' + v + ' + 5', [['2' + v + ' ' + m_ + ' 5', 'La frase dice «más 5», no «menos 5».'], [v + '^2 + 5', '«El doble» es multiplicar por 2, no elevar al cuadrado.'], ['2(' + v + ' + 5)', 'Así también se duplicaría el 5; la frase solo duplica a ' + v + ' y después suma 5.'], [v + ' + 10', 'Aquí se duplicó el 5 en lugar de ' + v + '.']]],
+    ['El triple de ' + v + ', menos 4', '3' + v + ' ' + m_ + ' 4', [['3' + v + ' + 4', 'La frase dice «menos 4», no «más 4».'], ['3(' + v + ' ' + m_ + ' 4)', 'Así también se triplicaría el 4; la frase solo triplica a ' + v + ' y después resta 4.'], ['4 ' + m_ + ' 3' + v, 'El orden está invertido: al triple de ' + v + ' se le resta 4, no al revés.'], [v + '^3 ' + m_ + ' 4', '«El triple» es multiplicar por 3, no elevar al cubo.']]],
+    [v + ' aumentado en 7', v + ' + 7', [[v + ' ' + m_ + ' 7', '«Aumentado» significa sumar, no restar.'], ['7' + v, 'Eso es multiplicar por 7; «aumentado en 7» es sumar 7.'], [v + '^7', 'Eso es elevar a la séptima potencia; «aumentado en 7» es sumar 7.'], ['7 ' + m_ + ' ' + v, 'Eso es restarle ' + v + ' a 7; «aumentado en 7» es sumar 7.']]],
+    ['El cuadrado de ' + v, v + '^2', [['2' + v, 'Eso es el doble (' + v + ' + ' + v + '); el cuadrado es ' + v + ' por ' + v + '.'], [v + '^3', 'Eso es el cubo; el cuadrado lleva exponente 2.'], [v + ' + 2', 'Eso es sumar 2; el cuadrado es multiplicar ' + v + ' por sí misma.'], ['2^' + v, 'Están invertidos la base y el exponente: el cuadrado de ' + v + ' es ' + v + ' elevada a 2.']]],
+    ['El producto de ' + v + ' y ' + w, v + w, [[v + ' + ' + w, 'Eso es la suma; «producto» significa multiplicar.'], [v + '^2' + w, 'Aquí ' + v + ' aparece dos veces; el producto es ' + v + ' por ' + w + ' una sola vez.'], [v + ' ' + m_ + ' ' + w, 'Eso es la resta; «producto» significa multiplicar.'], ['2' + v + w, 'Sobra el 2: el producto de ' + v + ' y ' + w + ' no se duplica.']]],
+    ['La suma de ' + v + ' y el doble de ' + w, v + ' + 2' + w, [['2' + v + ' + ' + w, 'Se duplicó ' + v + ' en lugar de ' + w + '.'], ['2(' + v + ' + ' + w + ')', 'Así se duplicarían las dos letras; la frase solo duplica a ' + w + '.'], [v + w + ' + 2', 'Eso multiplica ' + v + ' por ' + w + ' y suma 2; la frase pide sumar ' + v + ' con el doble de ' + w + '.'], [v + ' + ' + w + '^2', '«El doble» es multiplicar por 2, no elevar al cuadrado.']]],
+    ['El cubo de ' + v + ', disminuido en 1', v + '^3 ' + m_ + ' 1', [[v + '^2 ' + m_ + ' 1', 'Eso es el cuadrado; el cubo lleva exponente 3.'], ['3' + v + ' ' + m_ + ' 1', 'Eso es el triple; el cubo es ' + v + '·' + v + '·' + v + '.'], ['(' + v + ' ' + m_ + ' 1)^3', 'Así se resta 1 antes de elevar; la frase eleva ' + v + ' al cubo y después resta 1.'], ['1 ' + m_ + ' ' + v + '^3', 'El orden está invertido: al cubo de ' + v + ' se le resta 1, no al revés.']]],
+    ['Cinco veces ' + v + ', menos ' + w, '5' + v + ' ' + m_ + ' ' + w, [['5 + ' + v + ' ' + m_ + ' ' + w, '«Cinco veces» es multiplicar por 5, no sumar 5.'], [v + '^5 ' + m_ + ' ' + w, '«Cinco veces» es multiplicar por 5, no elevar a la quinta potencia.'], ['5(' + v + ' ' + m_ + ' ' + w + ')', 'Así también se multiplicaría ' + w + '; la frase multiplica solo a ' + v + ' y después resta ' + w + '.'], [w + ' ' + m_ + ' 5' + v, 'El orden está invertido: a 5' + v + ' se le resta ' + w + ', no al revés.']]],
   ];
   const [phrase, good, bads] = r.pick(lvl === 1 ? T.slice(0, 4) : T);
-  const opts = withOptions(r, [{ h: M(good) }], bads.map((b) => ({ h: M(b) })), 4);
+  const opts = withOptions(r, [{ h: M(good) }], bads.map(([b, f]) => ({ h: M(b), fb: f })), 4);
   return P({ kind: 'choice', dim: 'reconoce', instr: '¿Qué expresión algebraica representa esta frase?', expr: '<span class="phrase">«' + esc2(phrase) + '»</span>', options: opts,
     hints: ['Traduce palabra por palabra: «el doble» es multiplicar por 2, «más» es +, «menos» es −.', 'Decide primero qué operación va con la letra y cuál con el número suelto.', 'Escribe primero la parte de la letra y después agrega el +/− con el otro número.'],
     solution: ['Traducimos cada palabra: ' + M(good) + '.'], answer: M(good), fallbackTag: 'otro', fallback: 'Traduce con calma cada palabra a una operación.' });
@@ -1375,10 +1394,12 @@ function g_perimetro(r, lvl) {
   const mono = () => Mo(r.int(1, 4), { [v]: 1 });
   const shape = lvl === 1 ? r.pick(['tri', 'rect']) : r.pick(['tri', 'rect', 'pent', 'quad']);
   let sides, pts, name, expr;
-  if (shape === 'tri') { sides = [lin(), r.chance(0.5) ? mono() : lin(), lin()]; pts = SHAPES.tri; name = 'triángulo'; }
+  // Cada lado debe ser menor que la suma de los demás (desigualdad del polígono) para todo valor de la variable ≥ 1.
+  const valid = (ss) => ss.every((sd, i) => { const rest = Poly.sum(ss.filter((_, j) => j !== i)).sub(sd), at = (k) => evalNum(rest, { [v]: k }); return at(10) > 0 && at(100) > 0; });
+  if (shape === 'tri') { let t = 0; do { sides = [lin(), r.chance(0.5) ? mono() : lin(), lin()]; } while (!valid(sides) && ++t < 60); pts = SHAPES.tri; name = 'triángulo'; }
   else if (shape === 'rect') { const b = lin(), h = Mo(r.int(1, 3), { [v]: 1 }).add(K(r.int(-4, 6))); sides = [b, h, b, h]; pts = SHAPES.rect; name = 'rectángulo'; }
-  else if (shape === 'pent') { sides = [mono(), lin(), Mo(r.int(2, 4), { [v]: 1 }).add(K(-r.int(1, 5))), mono(), lin()]; pts = SHAPES.pent; name = 'pentágono irregular'; }
-  else { sides = [lin(), lin(), mono(), Mo(r.int(1, 3), { [v]: 1 }).add(K(-r.int(1, 5)))]; pts = SHAPES.quad; name = 'cuadrilátero'; }
+  else if (shape === 'pent') { let t = 0; do { sides = [mono(), lin(), Mo(r.int(2, 4), { [v]: 1 }).add(K(-r.int(1, 5))), mono(), lin()]; } while (!valid(sides) && ++t < 60); pts = SHAPES.pent; name = 'pentágono irregular'; }
+  else { let t = 0; do { sides = [lin(), lin(), mono(), Mo(r.int(1, 3), { [v]: 1 }).add(K(-r.int(1, 5)))]; } while (!valid(sides) && ++t < 60); pts = SHAPES.quad; name = 'cuadrilátero'; }
   const total = Poly.sum(sides);
   const labels = sides.map((s) => fs(s));
   const gp = grouped(sides.flatMap((s) => s.sorted().map((t) => Poly.mono(t.c, t.e))));
@@ -1447,7 +1468,7 @@ function g_exponentes(r, lvl) {
     const m = r.int(2, 4), n = r.int(2, 4); expr = '(' + X(m) + ')^' + n; ans = Mo(1, { [v]: m * n });
     wrongs = [{ p: Mo(1, { [v]: m + n }), tag: 'exponentes', msg: 'Sumaste los exponentes. En una potencia de una potencia, los exponentes se <b>multiplican</b>.' }];
     hints = [M('(' + X(m) + ')^' + n) + ' significa multiplicar ' + M(X(m)) + ' por sí mismo ' + n + ' veces.', 'Cada ' + M(X(m)) + ' aporta ' + m + ' letras; son ' + n + ' veces.', 'Multiplica ' + m + ' × ' + n + '.'];
-    sol = [M('(' + X(m) + ')^' + n + ' = ' + Array(n).fill(X(m)).join('·')), 'Son ' + n + ' grupos de ' + m + ' letras: ' + M(m + '×' + n + ' = ' + m * n)];
+    sol = [M('(' + X(m) + ')^' + n + ' = ' + Array(n).fill(X(m)).join('·')), 'Son ' + n + ' grupos de ' + m + ' letras: ' + M(m + '×' + n + ' = ' + m * n), 'Resultado: ' + M(X(m * n))];
   } else if (kind === 'coc') {
     const m = r.int(5, 9), n = r.int(2, m - 1); expr = frac(X(m), X(n)); ans = Mo(1, { [v]: m - n });
     wrongs = [{ p: Mo(1, { [v]: m + n }), tag: 'exponentes', msg: 'Al dividir potencias con la misma base, los exponentes se <b>restan</b>.' }];
@@ -1482,7 +1503,7 @@ function g_exponentes(r, lvl) {
     wrongs = [{ p: Mo(1, { [v]: m + n - o }), tag: 'exponentes', msg: 'La potencia de una potencia multiplica exponentes (' + m + ' × ' + n + '), no los suma.' }];
     hints = ['Primero resuelve la potencia de arriba.', M('(' + X(m) + ')^' + n + ' = ' + X(t))
       , 'Ahora resta: ' + t + ' − ' + o + '.'];
-    sol = ['Arriba: ' + M('(' + X(m) + ')^' + n + ' = ' + X(t)), 'Dividimos: se restan exponentes: ' + M(t + ' ' + MINUS + ' ' + o + ' = ' + (t - o))];
+    sol = ['Arriba: ' + M('(' + X(m) + ')^' + n + ' = ' + X(t)), 'Dividimos: se restan exponentes: ' + M(t + ' ' + MINUS + ' ' + o + ' = ' + (t - o)), 'Resultado: ' + M(X(t - o))];
   }
   return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Simplifica usando las leyes de los exponentes.', expr: M(expr), expected: ans, vars: [v, a, b], wrongs, fallbackTag: 'exponentes', hints, solution: sol, answer: MP(ans),
     fallback: 'Recuerda: al multiplicar bases iguales se suman los exponentes; al dividir se restan; en una potencia de potencia se multiplican.' });
@@ -1804,7 +1825,7 @@ function g_trinomio2(r, lvl) {
   const a_ = pa * ra, c_ = qa * sa, b_ = pa * sa + qa * ra;
   return mkFactorProblem({ poly, factors: [F1, F2], instr: 'Factoriza este trinomio.', expr: MP(poly), vars: [v], fallbackTag: 'tipo de factorización', factorTag: 'tipo de factorización',
     hints: ['Piensa en dos binomios: los primeros términos multiplican a ' + M(fs(Mo(a_, { [v]: 2 }))) + ' y los últimos a ' + c_ + '.', 'Prueba combinaciones y revisa la suma de los productos «medio por medio» y «extremo por extremo»: debe dar ' + M(fs(Mo(b_, { [v]: 1 }))) + '.', 'Prueba con ' + M('(' + fs(Mo(pa, { [v]: 1 })) + ' ...)(' + fs(Mo(ra, { [v]: 1 })) + ' ...)') + '.'],
-    solution: ['Factores de ' + a_ + ': ' + M(pa + v + ' y ' + ra + v) + ' ; factores de ' + c_ + ': ' + qa + ' y ' + sa, 'Probamos: ' + M(par(F1) + par(F2)) + '. Producto extremos + medios: ' + M(fs(Mo(pa * sa, { [v]: 1 })) + ' + ' + fs(Mo(qa * ra, { [v]: 1 })) + ' = ' + fs(Mo(b_, { [v]: 1 }))) + ' ✓', 'Factorizado: ' + M(par(F1) + par(F2))], answer: M(par(F1) + par(F2)),
+    solution: ['Factores de ' + M(fs(Mo(a_, { [v]: 2 }))) + ': ' + M(fs(Mo(pa, { [v]: 1 }))) + ' y ' + M(fs(Mo(ra, { [v]: 1 }))) + ' ; factores de ' + M(fs(K(c_))) + ': ' + M(fs(K(qa))) + ' y ' + M(fs(K(sa))), 'Probamos: ' + M(par(F1) + par(F2)) + '. Producto extremos + medios: ' + M(fs(Mo(pa * sa, { [v]: 1 })) + (qa * ra < 0 ? ' ' + MINUS + ' ' + fs(Mo(-qa * ra, { [v]: 1 })) : ' + ' + fs(Mo(qa * ra, { [v]: 1 }))) + ' = ' + fs(Mo(b_, { [v]: 1 }))) + ' ✓', 'Factorizado: ' + M(par(F1) + par(F2))], answer: M(par(F1) + par(F2)),
     fallback: 'Prueba combinaciones de factores de a y de c hasta que los productos cruzados sumen el término del medio.' });
 }
 
@@ -1831,7 +1852,9 @@ function g_metodoFact(r, lvl) {
   const sd = r.int(1, 1e9);
   let base;
   switch (k) { case 'fc': base = g_factorComun(RNG(sd), 1); break; case 'dc': base = g_difCuadrados(RNG(sd), 1); break; case 'tcp': base = g_tcp(RNG(sd), 1); break; case 't1': base = g_trinomio1(RNG(sd), 1); break; case 't2': base = g_trinomio2(RNG(sd), 1); break; default: base = g_cubos(RNG(sd), 1); }
-  const wrongKinds = r.shuffle(kinds.filter((x) => x !== k)).slice(0, 3);
+  // Un trinomio cuadrado perfecto también se puede factorizar como trinomio de la forma x² + bx + c (o ax² + bx + c):
+  // esas opciones no se ofrecen como incorrectas cuando la respuesta es TCP.
+  const wrongKinds = r.shuffle(kinds.filter((x) => x !== k && !(k === 'tcp' && (x === 't1' || x === 't2')))).slice(0, 3);
   const opts = r.shuffle([k].concat(wrongKinds)).map((x) => ({ h: labels[x], ok: x === k, fb: 'No: este se factoriza con «' + labels[k] + '».', tag: 'tipo de factorización' }));
   const cue = {
     fc: 'Todos los términos comparten un número o una letra.', dc: 'Es una resta de dos cuadrados perfectos.', tcp: 'Los extremos son cuadrados perfectos y el del medio es el doble producto de sus raíces.',
@@ -1882,23 +1905,23 @@ function g_conceptoEc(r, lvl) {
     ans = v;
   } else if (kind === 'coef') {
     instr = 'En el primer miembro, ¿cuál es el <b>coeficiente</b> de ' + v + '?';
-    opts = withOptions(r, [{ h: String(a) }], [{ h: v, fb: 'Esa es la variable, no su coeficiente.' }, { h: String(b), fb: 'Ese es el término independiente, no el coeficiente.' }, { h: String(c) }, { h: String(-a) }], 4);
+    opts = withOptions(r, [{ h: String(a) }], [{ h: v, fb: 'Esa es la variable, no su coeficiente.' }, { h: String(b), fb: 'Ese es el término independiente, no el coeficiente.' }, { h: String(c), fb: 'Ese número es el segundo miembro, no acompaña a ' + v + '.' }, { h: String(-a), fb: 'Tiene el signo contrario: el coeficiente conserva el signo que trae.' }], 4);
     ans = String(a);
   } else if (kind === 'const') {
     instr = 'En el primer miembro, ¿cuál es el <b>término independiente</b>?';
-    opts = withOptions(r, [{ h: String(b) }], [{ h: v, fb: 'Esa es la variable.' }, { h: String(a), fb: 'Ese es el coeficiente de ' + v + '.' }, { h: String(c) }, { h: String(-b) }], 4);
+    opts = withOptions(r, [{ h: String(b) }], [{ h: v, fb: 'Esa es la variable.' }, { h: String(a), fb: 'Ese es el coeficiente de ' + v + '.' }, { h: String(c), fb: 'Ese número está en el segundo miembro; se pregunta por el primero.' }, { h: String(-b), fb: 'Tiene el signo contrario: el término independiente conserva su signo.' }], 4);
     ans = String(b);
   } else if (kind === 'miembro1') {
     instr = '¿Cuál es el <b>primer miembro</b> de la ecuación?';
-    opts = withOptions(r, [{ h: fs(lhs) }], [{ h: fs(rhs) }, { h: v }], 3);
+    opts = withOptions(r, [{ h: fs(lhs) }], [{ h: fs(rhs), fb: 'Ese es el segundo miembro: lo que está después del signo =.' }, { h: v, fb: 'Es solo la variable; el primer miembro es todo lo que está antes del signo =.' }], 3);
     ans = fs(lhs);
   } else if (kind === 'miembro2') {
     instr = '¿Cuál es el <b>segundo miembro</b> de la ecuación?';
-    opts = withOptions(r, [{ h: fs(rhs) }], [{ h: fs(lhs) }, { h: v }], 3);
+    opts = withOptions(r, [{ h: fs(rhs) }], [{ h: fs(lhs), fb: 'Ese es el primer miembro: lo que está antes del signo =.' }, { h: v, fb: 'Es solo la variable; el segundo miembro es todo lo que está después del signo =.' }], 3);
     ans = fs(rhs);
   } else {
     instr = '¿Cuál es el <b>grado</b> de esta ecuación?';
-    opts = withOptions(r, [{ h: '1' }], [{ h: '0', fb: 'Grado 0 sería si no hubiera variable.' }, { h: '2', fb: 'Grado 2 sería si la variable estuviera al cuadrado.' }, { h: '3' }], 4);
+    opts = withOptions(r, [{ h: '1' }], [{ h: '0', fb: 'Grado 0 sería si no hubiera variable.' }, { h: '2', fb: 'Grado 2 sería si la variable estuviera al cuadrado.' }, { h: '3', fb: 'Grado 3 sería si la variable estuviera al cubo.' }], 4);
     ans = '1';
   }
   return P({ kind: 'choice', dim: 'reconoce', instr, expr: M(eqStr), options: opts.map((o) => ({ ...o, h: M(o.h) })),
@@ -1924,15 +1947,16 @@ function g_ecBasica(r, lvl) {
 
 function g_terminosEc(r, lvl) {
   const v = 'x';
-  const c1 = r.nz(2, lvl === 1 ? 6 : 9), c2 = r.nz(1, lvl === 1 ? 5 : 8);
-  let a = c1 - c2; if (a === 0) a = c1 + 1 - c2;
+  const c1 = r.nz(2, lvl === 1 ? 6 : 9); let c2 = r.nz(1, lvl === 1 ? 5 : 8);
+  if (c2 === c1) c2 = c1 - 1; // evita que los términos con x se cancelen en el enunciado
+  const a = c1 - c2;
   const b = r.nz(-12, 12) * (r.chance(0.5) ? 1 : -1);
   const x = r.nz(-9, 9);
   const rhs = a * x + b;
   const terms = r.chance(0.5) ? [Mo(c1, { [v]: 1 }), K(b), Mo(-c2, { [v]: 1 })] : [K(b), Mo(c1, { [v]: 1 }), Mo(-c2, { [v]: 1 })];
   const lhsStr = fmtList(terms);
   return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Primero reduce los términos semejantes y después resuelve la ecuación.',
-    expr: M(lhsStr + ' = ' + rhs), expected: K(x), vars: [v],
+    expr: M(lhsStr + ' = ' + String(rhs).replace('-', MINUS)), expected: K(x), vars: [v],
     hints: ['Junta primero los términos con ' + v + ' entre sí (súmalos con su signo).', 'Después aplica el principio de equivalencia para despejar ' + v + '.', 'Comprueba sustituyendo tu respuesta en la ecuación original.'],
     solution: [mline(lhsStr + ' = ' + rhs), 'Reducimos términos semejantes: ' + mline(fs(Mo(a, { [v]: 1 }).add(K(b))) + ' = ' + rhs), mline(v + ' = ' + x)],
     answer: M(String(x)), fallbackTag: 'semejantes', fallback: 'Junta primero los términos con ' + v + ' (súmalos con su signo) y después despeja.' });
@@ -1946,8 +1970,9 @@ function g_ecParentesis(r, lvl) {
   let m = 0, extra = 0;
   if (lvl >= 2) { m = r.nz(1, 7) * (r.chance(0.5) ? 1 : -1); if (m === k) m += 1; }
   if (lvl === 3) extra = r.nz(-8, 8);
-  const lhsBase = k + '(' + v + (p >= 0 ? ' + ' + p : ' ' + MINUS + ' ' + (-p)) + ')';
-  const lhsStr = extra ? (extra > 0 ? extra + ' + ' + lhsBase : MINUS + ' ' + Math.abs(extra) + ' + ' + lhsBase) : lhsBase;
+  const inner = Math.abs(k) + '(' + v + (p >= 0 ? ' + ' + p : ' ' + MINUS + ' ' + (-p)) + ')';
+  const lhsBase = (k < 0 ? MINUS : '') + inner;
+  const lhsStr = extra ? (extra > 0 ? String(extra) : MINUS + Math.abs(extra)) + (k < 0 ? ' ' + MINUS + ' ' : ' + ') + inner : lhsBase;
   const q = extra + k * x + k * p - m * x;
   const rhsStr = m ? fs(Mo(m, { [v]: 1 }).add(K(q))) : String(q);
   return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'Aplica la propiedad distributiva y resuelve la ecuación.',
@@ -1966,7 +1991,7 @@ function g_ecAmbosLados(r, lvl) {
   const x = r.nz(-9, 9);
   const d = (a - c) * x + b;
   const lhsTerms = r.chance(0.5) ? [Mo(a, { [v]: 1 }), K(b)] : [K(b), Mo(a, { [v]: 1 })];
-  const rhsTerms = r.chance(0.5) ? [Mo(c, { [v]: 1 }), K(d)] : [K(d), Mo(c, { [v]: 1 })];
+  const rhsTerms = (r.chance(0.5) ? [Mo(c, { [v]: 1 }), K(d)] : [K(d), Mo(c, { [v]: 1 })]).filter((t) => !t.isZero());
   const lhsStr = fmtList(lhsTerms), rhsStr = fmtList(rhsTerms);
   return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: 'La variable aparece en los dos lados. Resuelve la ecuación.',
     expr: M(lhsStr + ' = ' + rhsStr), expected: K(x), vars: [v],
@@ -2018,9 +2043,10 @@ function g_encuentraError(r) {
         why: 'El ' + k + ' debe multiplicar a los dos términos del paréntesis: el paso correcto es ' + k + v + ' + ' + (k * p) + ' = ' + c + ', no ' + k + v + ' + ' + p + ' = ' + c + '.' };
     } },
     { tag: 'semejantes', label: 'Error al reducir términos semejantes', build: () => {
-      const c1 = r.nz(2, 9), c2 = r.nz(1, 8), b = r.nz(1, 15), c = r.nz(1, 30);
-      return { steps: [M(c1 + v + ' + ' + c2 + v + ' ' + MINUS + ' ' + b + ' = ' + c), M((c1 * c2) + v + ' ' + MINUS + ' ' + b + ' = ' + c)],
-        why: 'Los términos semejantes se suman, no se multiplican: ' + c1 + v + ' + ' + c2 + v + ' = ' + (c1 + c2) + v + ', no ' + (c1 * c2) + v + '.' };
+      const c1 = r.nz(2, 9); let c2 = r.nz(1, 8); if (c1 * c2 === c1 + c2) c2 = 3; // con 2x + 2x el «error» daría el resultado correcto
+      const b = r.nz(1, 15), c = r.nz(1, 30);
+      return { steps: [M(c1 + v + ' + ' + (c2 === 1 ? '' : c2) + v + ' ' + MINUS + ' ' + b + ' = ' + c), M((c1 * c2) + v + ' ' + MINUS + ' ' + b + ' = ' + c)],
+        why: 'Los términos semejantes se suman, no se multiplican: ' + c1 + v + ' + ' + (c2 === 1 ? '' : c2) + v + ' = ' + (c1 + c2) + v + ', no ' + (c1 * c2) + v + '.' };
     } },
     { tag: 'operación inversa', label: 'Error al usar la operación inversa', build: () => {
       const b = r.nz(2, 15), c = r.nz(2, 20);
@@ -2028,7 +2054,7 @@ function g_encuentraError(r) {
         why: 'La operación inversa de sumar ' + b + ' es restar ' + b + ' (no volver a sumarlo): el paso correcto es ' + v + ' = ' + c + ' ' + MINUS + ' ' + b + '.' };
     } },
     { tag: 'despeje', label: 'Error al despejar la variable', build: () => {
-      const a = r.nz(2, 9), c = r.nz(2, 40);
+      const a = r.nz(2, 9); let c = r.nz(2, 40); if (c === a) c = a + 1; // si a = c, «a/c» y «c/a» valen lo mismo y no habría error
       return { steps: [M(a + v + ' = ' + c), M(v + ' = ' + a + '/' + c)],
         why: 'Para despejar ' + v + ' hay que dividir el otro lado entre ' + a + ', no al revés: el paso correcto es ' + v + ' = ' + c + '/' + a + '.' };
     } },
@@ -2040,7 +2066,11 @@ function g_encuentraError(r) {
   ];
   const chosen = r.pick(TYPES);
   const built = chosen.build();
-  const options = r.shuffle(TYPES.map((t) => ({ h: t.label, ok: t.tag === chosen.tag, fb: t.tag === chosen.tag ? '' : built.why, tag: t.tag })));
+  // «Operación inversa» se traslapa con «signo», «fracciones» y «despeje» (en los tres se usa la operación equivocada al pasar
+  // un número al otro lado): no se ofrecen juntas para que solo haya una respuesta defendible.
+  const OVERLAP = { 'operación inversa': ['signos', 'fracciones', 'despeje'], signos: ['operación inversa'], fracciones: ['operación inversa'], despeje: ['operación inversa'] };
+  const shown = TYPES.filter((t) => t.tag === chosen.tag || !(OVERLAP[chosen.tag] || []).includes(t.tag));
+  const options = r.shuffle(shown.map((t) => ({ h: t.label, ok: t.tag === chosen.tag, fb: t.tag === chosen.tag ? '' : 'No es ese tipo de error. ' + built.why, tag: t.tag })));
   return P({ kind: 'choice', dim: 'comprende', instr: 'Este procedimiento tiene un error. ¿De qué tipo es?',
     expr: '<div class="mline">' + built.steps.join('</div><div class="mline">') + '</div>', options,
     hints: ['Revisa cada paso: ¿se hizo lo mismo en los dos lados?', 'Compara el paso con la regla que le corresponde (signos, distributiva, términos semejantes, operación inversa, despeje o fracciones).'],
@@ -2048,24 +2078,31 @@ function g_encuentraError(r) {
 }
 
 function g_aplicacion1(r) {
+  // Cada plantilla trae su propio planteamiento y procedimiento, con los datos del problema mostrado.
   const TPL = [
     () => { const base = r.nz(5, 20) * 5, rate = r.nz(2, 10) * 5, x = r.nz(2, 20); const total = base + rate * x;
-      return { instr: 'Un taxi cobra $' + base + ' de bandera más $' + rate + ' por cada kilómetro recorrido. Si un viaje costó $' + total + ', ¿cuántos kilómetros se recorrieron?', x }; },
+      return { instr: 'Un taxi cobra $' + base + ' de bandera más $' + rate + ' por cada kilómetro recorrido. Si un viaje costó $' + total + ', ¿cuántos kilómetros se recorrieron?', x,
+        def: 'kilómetros recorridos', eq: base + ' + ' + rate + 'x = ' + total, steps: [rate + 'x = ' + total + ' ' + MINUS + ' ' + base + ' = ' + (total - base), 'x = ' + (total - base) + ' ÷ ' + rate + ' = ' + x], unit: ' km' }; },
     () => { const s = r.nz(50, 400), w = r.nz(20, 100), x = r.nz(2, 20); const meta = s + w * x;
-      return { instr: 'Ana ya tenía $' + s + ' ahorrados y ahorra $' + w + ' cada semana. ¿Cuántas semanas necesita para llegar a $' + meta + '?', x }; },
-    () => { const d = r.nz(1, 15), x = r.nz(5, 40); const p = 2 * x - d;
-      return { instr: 'La edad de Pedro es el doble de la edad de su hermano, menos ' + d + ' años. Si Pedro tiene ' + p + ' años, ¿cuántos años tiene su hermano?', x }; },
+      return { instr: 'Ana ya tenía $' + s + ' ahorrados y ahorra $' + w + ' cada semana. ¿Cuántas semanas necesita para llegar a $' + meta + '?', x,
+        def: 'número de semanas', eq: s + ' + ' + w + 'x = ' + meta, steps: [w + 'x = ' + meta + ' ' + MINUS + ' ' + s + ' = ' + (meta - s), 'x = ' + (meta - s) + ' ÷ ' + w + ' = ' + x], unit: ' semanas' }; },
+    () => { const d = r.nz(1, 15), x = r.int(d + 5, 40); const p = 2 * x - d; // Pedro siempre mayor que su hermano y con edad positiva
+      return { instr: 'La edad de Pedro es el doble de la edad de su hermano, menos ' + d + (d === 1 ? ' año' : ' años') + '. Si Pedro tiene ' + p + ' años, ¿cuántos años tiene su hermano?', x,
+        def: 'edad del hermano', eq: '2x ' + MINUS + ' ' + d + ' = ' + p, steps: ['2x = ' + p + ' + ' + d + ' = ' + (p + d), 'x = ' + (p + d) + ' ÷ 2 = ' + x], unit: ' años' }; },
     () => { const x = r.nz(2, 20); const per = 8 * x;
-      return { instr: 'El largo de un rectángulo mide el triple de su ancho. Si el perímetro del rectángulo es ' + per + ' metros, ¿cuánto mide el ancho?', x }; },
-    () => { const d = r.nz(20, 300), x = r.nz(50, 900); const f = x - d;
-      return { instr: 'Un artículo tenía un descuento de $' + d + ' y se quedó en $' + f + '. ¿Cuál era su precio original?', x }; },
+      return { instr: 'El largo de un rectángulo mide el triple de su ancho. Si el perímetro del rectángulo es ' + per + ' metros, ¿cuánto mide el ancho?', x,
+        def: 'ancho (entonces el largo es ' + M('3x') + ')', eq: '2x + 2(3x) = ' + per, steps: ['8x = ' + per, 'x = ' + per + ' ÷ 8 = ' + x], unit: ' m' }; },
+    () => { const d = r.nz(20, 300), x = d + r.nz(30, 600); const f = x - d; // el precio final siempre es positivo
+      return { instr: 'Un artículo tenía un descuento de $' + d + ' y se quedó en $' + f + '. ¿Cuál era su precio original?', x,
+        def: 'precio original', eq: 'x ' + MINUS + ' ' + d + ' = ' + f, steps: ['x = ' + f + ' + ' + d + ' = ' + x], unit: '', pre: '$' }; },
     () => { const c = r.nz(2, 12), e = r.nz(50, 500), x = r.nz(20, 300); const m = e + c * x;
-      return { instr: 'Julia debe pagar $' + m + ' en ' + c + ' cuotas iguales, más un enganche de $' + e + '. ¿Cuánto es cada cuota?', x }; },
+      return { instr: 'Julia compró un artículo de $' + m + '. Dio un enganche de $' + e + ' y el resto lo pagará en ' + c + ' cuotas iguales. ¿Cuánto es cada cuota?', x,
+        def: 'valor de cada cuota', eq: e + ' + ' + c + 'x = ' + m, steps: [c + 'x = ' + m + ' ' + MINUS + ' ' + e + ' = ' + (m - e), 'x = ' + (m - e) + ' ÷ ' + c + ' = ' + x], unit: '', pre: '$' }; },
   ];
   const t = r.pick(TPL)();
   return P({ kind: 'input', mode: 'expanded', dim: 'resuelve', instr: t.instr, expr: '', expected: K(t.x), vars: ['x'],
     hints: ['Lee con calma: ¿qué te preguntan y qué información ya tienes?', 'Asigna una letra a lo que no conoces y plantea la ecuación con esa información.', 'Resuelve la ecuación con el principio de equivalencia.'],
-    solution: ['Definimos x = la cantidad que buscamos.', 'Planteamos la ecuación con los datos del problema.', 'Resolvemos y comprobamos que la respuesta tenga sentido en el contexto.'],
+    solution: ['Definimos ' + M('x') + ' = ' + t.def + '.', 'Planteamos la ecuación: ' + M(t.eq) + '.'].concat(t.steps.map((x) => M(x))).concat(['Respuesta: ' + (t.pre || '') + t.x + t.unit + '.']),
     answer: M(String(t.x)), fallbackTag: 'despeje', fallback: 'Plantea primero la ecuación con los datos del problema y después resuélvela.' });
 }
 
@@ -2122,16 +2159,17 @@ function g_graficar(r, lvl) {
   const range = [-6, 6];
   const eqStr = 'y = ' + fs(Mo(m, { x: 1 }).add(K(b)));
   const mkThumb = (mm, bb) => svgPlane({ range, lines: [{ m: mm, b: bb, color: 'c1' }] });
+  const nn = (n) => (n < 0 ? MINUS + Math.abs(n) : String(n));
   const cand = [];
-  const dSlope = m + (r.nz(1, 2) * (r.chance(0.5) ? 1 : -1)); cand.push({ m: dSlope || (m + 1), b });
-  const dB = b + r.nz(2, 4) * (r.chance(0.5) ? 1 : -1); cand.push({ m, b: dB });
-  const negM = -m; cand.push({ m: negM || 1, b });
+  const dSlope = m + (r.nz(1, 2) * (r.chance(0.5) ? 1 : -1)); cand.push({ m: dSlope || (m + 1), b, why: 'Esa recta sí cruza el eje y en (0, ' + nn(b) + '), pero su inclinación es distinta: no tiene pendiente ' + nn(m) + '.' });
+  const dB = b + r.nz(2, 4) * (r.chance(0.5) ? 1 : -1); cand.push({ m, b: dB, why: 'Esa recta tiene la inclinación correcta, pero cruza el eje y en (0, ' + nn(dB) + ') y no en (0, ' + nn(b) + ').' });
+  const negM = -m; cand.push({ m: negM || 1, b, why: 'Esa recta cruza en (0, ' + nn(b) + '), pero se inclina hacia el lado contrario: ' + (m > 0 ? 'baja' : 'sube') + ' al avanzar a la derecha.' });
   const wrongDefs = cand.filter((d) => (d.m !== m || d.b !== b));
   // nota: fx() (app.js) no escapa HTML al renderizar options[i].h, así que aquí podemos incrustar SVG crudo directamente.
-  const options = withOptions(r, [{ h: mkThumb(m, b) }], wrongDefs.map((d) => ({ h: mkThumb(d.m, d.b), fb: 'Esa gráfica no corresponde a ' + M(eqStr) + '.', tag: 'gráficas lineales' })), 4);
+  const options = withOptions(r, [{ h: mkThumb(m, b) }], wrongDefs.map((d) => ({ h: mkThumb(d.m, d.b), fb: d.why, tag: 'gráficas lineales' })), 4);
   return P({ kind: 'choice', dim: 'reconoce', instr: 'Verifica: ¿cuál de estas gráficas corresponde a la recta ' + M(eqStr) + '?', expr: '', options,
-    hints: ['Fíjate en dónde cruza el eje y: ese es el valor de b.', 'Fíjate en la inclinación: si sube o baja al avanzar hacia la derecha, y qué tan rápido.', 'El punto (0, ' + b + ') debe estar sobre la recta correcta.'],
-    solution: ['La recta ' + M(eqStr) + ' cruza el eje y en (0, ' + b + ') y tiene pendiente ' + m + '.'],
+    hints: ['Fíjate en dónde cruza el eje y: ese es el valor de b.', 'Fíjate en la inclinación: si sube o baja al avanzar hacia la derecha, y qué tan rápido.', 'El punto (0, ' + nn(b) + ') debe estar sobre la recta correcta.'],
+    solution: ['La recta ' + M(eqStr) + ' cruza el eje y en (0, ' + nn(b) + ') y tiene pendiente ' + nn(m) + ': ' + (m > 0 ? 'sube' : 'baja') + ' ' + Math.abs(m) + (Math.abs(m) === 1 ? ' unidad' : ' unidades') + ' por cada unidad que avanza a la derecha.'],
     answer: 'La gráfica de ' + eqStr, fallbackTag: 'gráficas lineales', fallback: 'Compara dónde cruza el eje y y la inclinación de cada recta con la ecuación dada.' });
 }
 
@@ -2161,7 +2199,13 @@ function g_sistemaGrafico(r, lvl) {
       answer: '(' + xi + ', ' + yi + ')', fallbackTag: 'sistemas gráficos', fallback: 'Resuelve el sistema algebraicamente para hallar el punto de intersección y luego ubícalo.' });
   }
   const NAMES = { unica: 'Una solución (las rectas se cortan en un punto)', paralelas: 'No tiene solución (las rectas son paralelas)', coincidentes: 'Infinitas soluciones (son la misma recta)' };
-  const opts = withOptions(r, [{ h: NAMES[kase] }], Object.keys(NAMES).filter((k) => k !== kase).map((k) => ({ h: NAMES[k] })), 3);
+  // Razón específica de por qué cada opción no aplica, según el caso real.
+  const WHY = {
+    unica: { paralelas: 'Para cortarse en un punto necesitarían pendientes distintas; aquí las dos tienen la misma pendiente.', coincidentes: 'No se cortan en un solo punto: son la misma recta y comparten todos sus puntos.' },
+    paralelas: { unica: 'Las pendientes son distintas, así que las rectas sí se cruzan.', coincidentes: 'Paralelas tendrían distinto cruce con el eje y; aquí pendiente y cruce coinciden.' },
+    coincidentes: { unica: 'Para ser la misma recta necesitarían la misma pendiente y el mismo cruce con el eje y.', paralelas: 'Tienen la misma pendiente, pero cruzan el eje y en puntos distintos: no son la misma recta.' },
+  };
+  const opts = withOptions(r, [{ h: NAMES[kase] }], Object.keys(NAMES).filter((k) => k !== kase).map((k) => ({ h: NAMES[k], fb: WHY[k][kase] })), 3);
   return P({ kind: 'choice', dim: 'reconoce', instr: 'Observa las dos rectas del sistema. ¿Qué tipo de solución tiene?',
     expr: '<div class="mline">' + M(eq1) + '</div><div class="mline">' + M(eq2) + '</div>', figure: fig, options: opts,
     hints: ['Si las rectas se cruzan en un punto, hay una única solución.', 'Si son paralelas (misma pendiente, distinto cruce con el eje y), no hay solución.', 'Si son exactamente la misma recta, hay infinitas soluciones.'],
@@ -2208,21 +2252,32 @@ function g_sistemaSumaResta(r, lvl) {
 }
 
 function g_aplicacionSistema(r) {
+  const num = (n) => (n < 0 ? MINUS + Math.abs(n) : String(n));
+  // Precio × cantidad: sustitución con y = n − x
+  const sustPrecio = (p1, p2, n, total, x, y) => ['Despejamos y en la primera: ' + M('y = ' + n + ' ' + MINUS + ' x') + '.',
+    'Sustituimos en la segunda: ' + M(p1 + 'x + ' + p2 + '(' + n + ' ' + MINUS + ' x) = ' + total) + ' → ' + M(fs(Mo(p1 - p2, { x: 1 })) + ' = ' + num(total - p2 * n)) + ' → ' + M('x = ' + x) + '.',
+    'Entonces ' + M('y = ' + n + ' ' + MINUS + ' ' + x + ' = ' + y) + '.'];
   const TPL = [
     () => { let p1 = r.nz(3, 15) * 10, p2 = r.nz(3, 15) * 10; if (p1 === p2) p2 += 10; const x = r.nz(5, 60), y = r.nz(5, 60); const n = x + y, total = p1 * x + p2 * y;
-      return { instr: 'En un evento se vendieron dos tipos de boletos: uno a $' + p1 + ' y otro a $' + p2 + '. En total se vendieron ' + n + ' boletos y se recaudaron $' + total + '. ¿Cuántos boletos de $' + p1 + ' y cuántos de $' + p2 + ' se vendieron?', x, y }; },
+      return { instr: 'En un evento se vendieron dos tipos de boletos: uno a $' + p1 + ' y otro a $' + p2 + '. En total se vendieron ' + n + ' boletos y se recaudaron $' + total + '. ¿Cuántos boletos de $' + p1 + ' y cuántos de $' + p2 + ' se vendieron? (x = boletos de $' + p1 + ', y = boletos de $' + p2 + ')', x, y,
+        def: 'x = boletos de $' + p1 + ' y y = boletos de $' + p2, eqs: ['x + y = ' + n, p1 + 'x + ' + p2 + 'y = ' + total], steps: sustPrecio(p1, p2, n, total, x, y) }; },
     () => { let p1 = r.nz(15, 60), p2 = r.nz(15, 60); if (p1 === p2) p2 += 5; const x = r.nz(3, 25), y = r.nz(3, 25); const n = x + y, total = p1 * x + p2 * y;
-      return { instr: 'En una frutería se vendieron ' + n + ' kg entre manzanas y naranjas. El kilogramo de manzana cuesta $' + p1 + ' y el de naranja $' + p2 + '. Si la venta total fue de $' + total + ', ¿cuántos kilogramos se vendieron de cada fruta?', x, y }; },
+      return { instr: 'En una frutería se vendieron ' + n + ' kg entre manzanas y naranjas. El kilogramo de manzana cuesta $' + p1 + ' y el de naranja $' + p2 + '. Si la venta total fue de $' + total + ', ¿cuántos kilogramos se vendieron de cada fruta? (x = kg de manzana, y = kg de naranja)', x, y,
+        def: 'x = kg de manzana y y = kg de naranja', eqs: ['x + y = ' + n, p1 + 'x + ' + p2 + 'y = ' + total], steps: sustPrecio(p1, p2, n, total, x, y) }; },
     () => { const d = r.nz(2, 20), x = r.nz(5, 40), y = x + d, sum = x + y;
-      return { instr: 'La suma de las edades de dos hermanos es ' + sum + ' años. El mayor tiene ' + d + ' años más que el menor. ¿Qué edad tiene cada uno? (x = menor, y = mayor)', x, y }; },
+      return { instr: 'La suma de las edades de dos hermanos es ' + sum + ' años. El mayor tiene ' + d + ' años más que el menor. ¿Qué edad tiene cada uno? (x = menor, y = mayor)', x, y,
+        def: 'x = edad del menor y y = edad del mayor', eqs: ['x + y = ' + sum, 'y = x + ' + d],
+        steps: ['Sustituimos y en la primera: ' + M('x + (x + ' + d + ') = ' + sum) + ' → ' + M('2x = ' + (sum - d)) + ' → ' + M('x = ' + x) + '.', 'Entonces ' + M('y = ' + x + ' + ' + d + ' = ' + y) + '.'] }; },
     () => { const y = r.nz(3, 15), diff = r.nz(2, 10), x = y + diff, sum = x + y;
       // y se elige primero y diff siempre es positivo, así x = y + diff SIEMPRE es mayor que y (x > y, nunca x <= y).
-      return { instr: 'Dos números suman ' + sum + ' y su diferencia es ' + diff + '. ¿Cuáles son los números? (x = mayor, y = menor)', x, y }; },
+      return { instr: 'Dos números suman ' + sum + ' y su diferencia es ' + diff + '. ¿Cuáles son los números? (x = mayor, y = menor)', x, y,
+        def: 'x = número mayor y y = número menor', eqs: ['x + y = ' + sum, 'x ' + MINUS + ' y = ' + diff],
+        steps: ['Sumamos las dos ecuaciones: ' + M('2x = ' + (sum + diff)) + ' → ' + M('x = ' + x) + '.', 'Entonces ' + M('y = ' + sum + ' ' + MINUS + ' ' + x + ' = ' + y) + '.'] }; },
   ];
   const t = r.pick(TPL)();
   return P({ kind: 'sys', dim: 'resuelve', instr: t.instr, expr: '', expected: { x: K(t.x), y: K(t.y) }, vars: ['x', 'y'],
     hints: ['Define una letra para cada cantidad desconocida.', 'Traduce la información del problema en dos ecuaciones.', 'Resuelve el sistema por el método que prefieras (sustitución o suma y resta).'],
-    solution: ['Definimos x y y como las dos cantidades que buscamos.', 'Planteamos un sistema de dos ecuaciones con la información del problema.', 'Resolvemos el sistema y comprobamos que la solución tenga sentido.'],
+    solution: ['Definimos ' + t.def + '.', 'Planteamos el sistema: ' + M(t.eqs[0]) + ' y ' + M(t.eqs[1]) + '.'].concat(t.steps).concat(['Respuesta: ' + M('x = ' + t.x) + ', ' + M('y = ' + t.y) + '.']),
     answer: 'x = ' + t.x + ', y = ' + t.y, fallbackTag: 'planteamiento de sistemas', fallback: 'Plantea las dos ecuaciones con la información del problema y resuelve el sistema paso a paso.' });
 }
 
@@ -2258,7 +2313,7 @@ function g_comprende(r, lvl, opts) {
   const list = WHY[sk] || WHY.cuadrado;
   const it = r.pick(list);
   const options = r.shuffle([{ h: it.ok, ok: true }].concat(it.bad.map((h) => ({ h, ok: false, fb: 'Piénsalo de nuevo: ' + it.ok, tag: 'otro' }))));
-  return P({ kind: 'choice', dim: 'comprende', instr: 'Piensa en el porqué.', expr: '<div class="why">' + it.q + '</div>', options: options.map((o) => ({ ...o, h: esc2(o.h).replace(/&lt;b&gt;/g, '<b>').replace(/&lt;\/b&gt;/g, '</b>') })),
+  return P({ kind: 'choice', dim: 'comprende', instr: 'Piensa en el porqué.', expr: '<div class="why">' + it.q + '</div>', options: options.map((o) => ({ ...o, h: esc2(o.h).replace(/&lt;b>/g, '<b>').replace(/&lt;\/b>/g, '</b>') })),
     hints: ['Recuerda de dónde sale cada término.', 'Piensa en el modelo de áreas o en abrir los paréntesis con calma.', 'Descarta las opciones que no explican el procedimiento.'],
     solution: [it.ok], answer: it.ok, fallbackTag: 'otro', fallback: 'Piensa en por qué funciona, no solo en qué hacer. ' + it.ok });
 }
@@ -2884,6 +2939,7 @@ function _nbGen(p, o, all) {
       if (n !== null && gn !== null && n > gn) return 'Se pasa: el grado es exactamente la suma de los exponentes.';
       return plain + ' no sale de sumar los exponentes de las letras.';
     }
+    if (/constante/.test(instr)) return 'Tiene letra: su valor cambia según la letra. Una constante es un número solo.';
     if (/términos/.test(instr)) {
       const st = _pl(ex).replace(/−/g, '-'); let nt = (st.match(/[+-]/g) || []).length + 1; if (/^-/.test(st)) nt--;
       if (n !== null && exps.length && n === Math.max.apply(null, exps)) return plain + ' es el mayor exponente (el grado), no la cantidad de términos.';
@@ -2933,7 +2989,8 @@ function whyNot(p, chosen) {
   const all = p.options, rows = [];
   all.forEach((o, i) => {
     if (o.ok) return;
-    let t = _nbGen(p, o, all);
+    // En traducción de frases cada opción trae su explicación específica; se usa antes que la heurística general.
+    let t = ((p.gen === 'lenguaje' || p.gen === 'graficar' || p.gen === 'conceptoEc' || p.gen === 'sistemaGrafico') && o.fb) ? o.fb : _nbGen(p, o, all);
     if (!t && o.fb) t = String(o.fb).replace(/^(No|Sí):\s*/, '').replace(/^Piénsalo de nuevo:.*$/, '');
     if (!t) t = 'No cumple lo que pide la pregunta; compárala con la respuesta correcta.';
     const label = p.gen === 'comprende' ? '«' + fx(o.h) + '»' : fx(o.h);
