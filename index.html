@@ -17,6 +17,7 @@ p{margin:.4em 0}
 button{font:inherit;cursor:pointer}
 .btn{display:block;width:100%;border:0;border-radius:16px;padding:15px 18px;font-weight:800;font-size:1rem;letter-spacing:.02em;background:var(--pri-l);color:var(--pri-d);margin-top:10px;min-height:52px;transition:transform .05s}
 .btn:active{transform:scale(.98)}
+.ico-share{vertical-align:-5px;margin-right:10px}
 .btn.primary{background:#F47024;color:#002643;box-shadow:0 4px 0 #B9500F}
 .btn.primary:active{box-shadow:0 1px 0 #B9500F;transform:translateY(3px)}
 .btn.ghost{background:transparent;color:var(--mute);font-weight:700;min-height:44px}
@@ -3782,7 +3783,7 @@ function finishRun(app, R) {
     h += '<h1>' + (R.closed ? 'Tu resultado' : '¡Lección completada!') + '</h1><p class="mute">' + L.icon + ' ' + L.title + '</p><div class="big">' + '⭐'.repeat(res.stars) + '<span style="opacity:.3">' + '⭐'.repeat(3 - res.stars) + '</span></div><p>' + res.firstTry + ' de ' + res.total + ' correctas al primer intento (' + res.pct + '%).' + (R.rewarded ? ' <b>+20 XP</b>' : '') + '</p></div>';
     const nl = nextLesson();
     h += nl ? '<button class="btn primary" data-act="lesson" data-id="' + nl.id + '">SIGUIENTE: ' + nl.icon + ' ' + nl.title.toUpperCase() + '</button><button class="btn" data-act="home">VOLVER A LA RUTA</button>' : '<button class="btn primary" data-act="examIntro">HACER EL EXAMEN FINAL</button><button class="btn" data-act="home">VOLVER A LA RUTA</button>';
-    h += '<div id="shareBox"><button class="btn" data-act="shareResult">📤 COMPARTIR RESULTADO</button></div>';
+    h += '<div id="shareBox"><button class="btn" data-act="shareResult" aria-label="Compartir resultado"><svg class="ico-share" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 12 18 5M6 12l12 7" stroke="currentColor" stroke-width="2.6" fill="none"/><circle cx="18" cy="5" r="3.4" fill="currentColor"/><circle cx="6" cy="12" r="3.4" fill="currentColor"/><circle cx="18" cy="19" r="3.4" fill="currentColor"/></svg>COMPARTIR RESULTADO</button></div>';
     prepShare(R); // prepara la tarjeta desde ya: al tocar, se comparte al instante dentro del toque
   } else if (R.kind === 'reto') {
     const best = Math.max(S.retos[R.n] || 0, pct); S.retos[R.n] = best; const ok = pct >= 60; if (ok) S.done[R.id] = { stars: pct >= 85 ? 3 : pct >= 70 ? 2 : 1, at: Date.now() }; S.xp += ok ? 40 : 10; touchStreak(); save();
@@ -3845,7 +3846,8 @@ function lessonResult(R) {
 function shareSummary(R) {
   const L = lessonById(R.id), res = lessonResult(R), weak = ((R.track && R.track.weak) || []).slice(0, 3);
   let fecha = ''; try { fecha = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { fecha = todayStr(); }
-  return { name: S.name || 'Alumno', lesson: L.title, fecha, first: res.firstTry, total: res.total, pct: res.pct, failed: res.failed, withHint: res.withHint, weak, stars: res.stars };
+  const num = LESSONS.filter((x) => x.stage === L.stage && !x.reto).indexOf(L) + 1;
+  return { name: S.name || 'Alumno', where: 'ETAPA ' + L.stage + ' · LECCIÓN ' + num, lesson: L.title, fecha, first: res.firstTry, total: res.total, pct: res.pct, failed: res.failed, withHint: res.withHint, weak, stars: res.stars };
 }
 function loadImg(src) { return new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; }); }
 async function makeShareCard(d) {
@@ -3868,26 +3870,28 @@ async function makeShareCard(d) {
   g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText('LECCIÓN TERMINADA', px + 112, 397); g.textAlign = 'center';
   // alumno, lección y fecha
   g.fillStyle = '#1D2B3A'; fit(d.name, 76, '900', 900); g.fillText(d.name, W / 2, 530);
-  g.fillStyle = '#F47024'; fit(d.lesson, 50, '800', 940); g.fillText(d.lesson, W / 2, 600);
-  g.fillStyle = '#6B5B4A'; g.font = '600 34px ' + F; g.fillText(d.fecha, W / 2, 652);
+  // ubicación en la ruta: ETAPA n · LECCIÓN m, y debajo el tema
+  g.fillStyle = '#6B5B4A'; g.font = '800 30px ' + F; try { g.letterSpacing = '3px'; } catch (e) { /* opcional */ }
+  g.fillText(d.where, W / 2, 592); try { g.letterSpacing = '0px'; } catch (e) { /* opcional */ }
+  g.fillStyle = '#F47024'; fit(d.lesson, 50, '800', 940); g.fillText(d.lesson, W / 2, 650);
+  g.fillStyle = '#6B5B4A'; g.font = '600 34px ' + F; g.fillText(d.fecha, W / 2, 700);
   // estrellas
-  for (let i = 0; i < 3; i++) star(W / 2 + (i - 1) * 110, 735, 46, i < d.stars);
+  for (let i = 0; i < 3; i++) star(W / 2 + (i - 1) * 110, 778, 46, i < d.stars);
   // tarjeta de resultados
-  rr(70, 815, 940, 350, 36); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#F3E3CF'; g.stroke();
-  g.fillStyle = '#1D2B3A'; g.font = '900 96px ' + F; g.textAlign = 'left'; g.fillText(d.first + ' de ' + d.total, 115, 935);
-  g.fillStyle = '#6B5B4A'; g.font = '700 34px ' + F; g.fillText('correctas a la primera', 117, 985);
-  g.textAlign = 'right'; g.fillStyle = '#0E9F6E'; g.font = '900 96px ' + F; g.fillText(d.pct + '%', 965, 935);
-  g.strokeStyle = '#F3E3CF'; g.lineWidth = 3; g.beginPath(); g.moveTo(115, 1018); g.lineTo(965, 1018); g.stroke();
+  rr(70, 855, 940, 350, 36); g.fillStyle = '#fff'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#F3E3CF'; g.stroke();
+  g.fillStyle = '#1D2B3A'; g.font = '900 96px ' + F; g.textAlign = 'left'; g.fillText(d.first + ' de ' + d.total, 115, 975);
+  g.fillStyle = '#6B5B4A'; g.font = '700 34px ' + F; g.fillText('correctas a la primera', 117, 1025);
+  g.textAlign = 'right'; g.fillStyle = '#0E9F6E'; g.font = '900 96px ' + F; g.fillText(d.pct + '%', 965, 975);
+  g.strokeStyle = '#F3E3CF'; g.lineWidth = 3; g.beginPath(); g.moveTo(115, 1058); g.lineTo(965, 1058); g.stroke();
   g.textAlign = 'left'; g.fillStyle = '#1D2B3A'; g.font = '800 40px ' + F;
-  g.fillText(d.failed + (d.failed === 1 ? ' falló el primer intento' : ' fallaron el primer intento'), 115, 1078);
-  g.fillText(d.withHint + (d.withHint === 1 ? ' reactivo con pista' : ' reactivos con pista'), 115, 1134);
+  g.fillText(d.failed + (d.failed === 1 ? ' falló el primer intento' : ' fallaron el primer intento'), 115, 1118);
+  g.fillText(d.withHint + (d.withHint === 1 ? ' reactivo con pista' : ' reactivos con pista'), 115, 1174);
   // para reforzar
-  g.textAlign = 'left'; g.fillStyle = '#B9500F'; g.font = '900 34px ' + F; g.fillText('PARA REFORZAR', 80, 1232);
+  g.textAlign = 'left'; g.fillStyle = '#B9500F'; g.font = '900 34px ' + F; g.fillText('PARA REFORZAR', 80, 1270);
   g.fillStyle = '#1D2B3A'; g.font = '700 36px ' + F;
   const items = d.weak.length ? d.weak : ['¡Nada pendiente en esta lección!'];
-  items.slice(0, 3).forEach((t, i) => { const y = 1280 + i * 46; if (d.weak.length) { g.fillStyle = '#F47024'; g.beginPath(); g.arc(92, y - 12, 8, 0, Math.PI * 2); g.fill(); } g.fillStyle = '#1D2B3A'; fit(t, 36, '700', 660); g.fillText(t, d.weak.length ? 115 : 80, y); });
-  if (mas) g.drawImage(mas, W - 262, H - 238, 222, 222);
-  g.textAlign = 'center'; g.fillStyle = '#B0A08C'; g.font = '700 24px ' + F; g.fillText('Hey Jari · Álgebra paso a paso', W / 2 - 120, H - 16);
+  items.slice(0, 3).forEach((t, i) => { const y = 1318 + i * 44; if (d.weak.length) { g.fillStyle = '#F47024'; g.beginPath(); g.arc(92, y - 12, 8, 0, Math.PI * 2); g.fill(); } g.fillStyle = '#1D2B3A'; fit(t, 36, '700', 660); g.fillText(t, d.weak.length ? 115 : 80, y); });
+  if (mas) g.drawImage(mas, W - 258, H - 232, 218, 218);
   return new Promise((res) => c.toBlob((b) => res(b), 'image/png'));
 }
 function prepShare(R) {
